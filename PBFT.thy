@@ -88,12 +88,23 @@ definition change_view where
     \<and> (s\<cdot>view) p < v
     \<and> s' = s<view := (s\<cdot>view)(p := v)>"
 
+definition byzantine_havoc where
+  \<comment> \<open>Byzantine parties can do arbitrary state changes, but correct parties' state is preserved\<close>
+  "byzantine_havoc s s' p \<equiv>
+      byz p
+    \<and> (\<forall> p' v b. \<not> byz p' \<longrightarrow> 
+        (s'\<cdot>committed) p' v b = (s\<cdot>committed) p' v b \<and>
+        (s'\<cdot>prepared) p' v b = (s\<cdot>prepared) p' v b \<and>
+        (s'\<cdot>pre_prepared) p' v b = (s\<cdot>pre_prepared) p' v b \<and>
+        (s'\<cdot>view) p' = (s\<cdot>view) p')"
+
 definition trans_rel where
   "trans_rel s s' p q v b \<equiv>
       commit s s' p q v b
     \<or> prepare s s' p q v b
     \<or> pre_prepare s s' p v b
-    \<or> change_view s s' p v"
+    \<or> change_view s s' p v
+    \<or> byzantine_havoc s s' p"
 
 section \<open>Induction proofs\<close>
 
@@ -107,7 +118,7 @@ next
   proof -
     assume asm: "trans_rel s s' p q v b \<and> inv0 s"
     then have inv0: "inv0 s" by simp
-    from asm have "commit s s' p q v b \<or> prepare s s' p q v b \<or> pre_prepare s s' p v b \<or> change_view s s' p v"
+    from asm have "commit s s' p q v b \<or> prepare s s' p q v b \<or> pre_prepare s s' p v b \<or> change_view s s' p v \<or> byzantine_havoc s s' p"
       unfolding trans_rel_def by simp
     then show "inv0 s'"
     proof (elim disjE)
@@ -127,6 +138,10 @@ next
       \<comment> \<open>change_view only increases view for one party, preserves all prepared/committed/pre_prepared\<close>
       thus ?thesis using inv0 unfolding inv0_def change_view_def 
         by (auto; metis order.strict_implies_order order.trans)
+    next
+      assume "byzantine_havoc s s' p"
+      \<comment> \<open>byzantine_havoc preserves all correct parties' state\<close>
+      thus ?thesis using inv0 unfolding inv0_def byzantine_havoc_def by auto
     qed
   qed
 qed
@@ -138,7 +153,7 @@ proof -
     by (simp add: init_def inv1_def)
 next
   show "trans_rel s s' p q v b \<and> inv1 s \<Longrightarrow> inv1 s'"
-    unfolding trans_rel_def commit_def prepare_def pre_prepare_def change_view_def inv1_def
+    unfolding trans_rel_def commit_def prepare_def pre_prepare_def change_view_def byzantine_havoc_def inv1_def
     apply auto
         apply (smt (verit) fun_upd_apply)
          apply meson+
@@ -155,7 +170,7 @@ next
   proof -
     assume asm: "trans_rel s s' p q v b \<and> inv2 s"
     then have inv2: "inv2 s" by simp
-    from asm have "commit s s' p q v b \<or> prepare s s' p q v b \<or> pre_prepare s s' p v b \<or> change_view s s' p v"
+    from asm have "commit s s' p q v b \<or> prepare s s' p q v b \<or> pre_prepare s s' p v b \<or> change_view s s' p v \<or> byzantine_havoc s s' p"
       unfolding trans_rel_def by simp
     then show "inv2 s'"
     proof (elim disjE)
@@ -175,6 +190,10 @@ next
       assume "change_view s s' p v"
       \<comment> \<open>change_view doesn't change prepared or pre_prepared\<close>
       thus ?thesis using inv2 unfolding inv2_def change_view_def by auto
+    next
+      assume "byzantine_havoc s s' p"
+      \<comment> \<open>byzantine_havoc preserves all correct parties' state\<close>
+      thus ?thesis using inv2 unfolding inv2_def byzantine_havoc_def by auto
     qed
   qed
 qed
@@ -189,7 +208,7 @@ next
   proof -
     assume asm: "trans_rel s s' p q v b \<and> inv3 s"
     then have inv3: "inv3 s" by simp
-    from asm have "commit s s' p q v b \<or> prepare s s' p q v b \<or> pre_prepare s s' p v b \<or> change_view s s' p v"
+    from asm have "commit s s' p q v b \<or> prepare s s' p q v b \<or> pre_prepare s s' p v b \<or> change_view s s' p v \<or> byzantine_havoc s s' p"
       unfolding trans_rel_def by simp
     then show "inv3 s'"
     proof (elim disjE)
@@ -208,6 +227,10 @@ next
       assume "change_view s s' p v"
       \<comment> \<open>change_view doesn't change pre_prepared\<close>
       thus ?thesis using inv3 unfolding inv3_def change_view_def by auto
+    next
+      assume "byzantine_havoc s s' p"
+      \<comment> \<open>byzantine_havoc preserves all correct parties' state\<close>
+      thus ?thesis using inv3 unfolding inv3_def byzantine_havoc_def by auto
     qed
   qed
 qed
@@ -222,7 +245,7 @@ next
   proof -
     assume asm: "trans_rel s s' p q v b \<and> inv4 s"
     then have inv4: "inv4 s" by simp
-    from asm have "commit s s' p q v b \<or> prepare s s' p q v b \<or> pre_prepare s s' p v b \<or> change_view s s' p v"
+    from asm have "commit s s' p q v b \<or> prepare s s' p q v b \<or> pre_prepare s s' p v b \<or> change_view s s' p v \<or> byzantine_havoc s s' p"
       unfolding trans_rel_def by simp
     then show "inv4 s'"
     proof (elim disjE)
@@ -243,9 +266,13 @@ next
       assume "change_view s s' p v"
       \<comment> \<open>change_view doesn't change pre_prepared or committed\<close>
       thus ?thesis using inv4 unfolding inv4_def change_view_def safe_def by auto
+    next
+      assume "byzantine_havoc s s' p"
+      \<comment> \<open>byzantine_havoc preserves all correct parties' state\<close>
+      thus ?thesis using inv4 unfolding inv4_def byzantine_havoc_def safe_def by auto
     qed
   qed
-  oops
+qed
 
 lemma l0:
   fixes s p p' v b b'
