@@ -42,7 +42,7 @@ definition inv3 where
   "inv3 s \<equiv> \<forall> p v b b' . \<not> byz p \<and> (s\<cdot>pre_prepared) p v b \<and> (s\<cdot>pre_prepared) p v b' \<longrightarrow> b = b'"
 
 definition safe where
-  \<comment> \<open>A block b is safe in view v when no block that is incompatible or longer can be committed in any previous view\<close>
+  \<comment> \<open>A block b is safe in view v when no block that is incompatible or longer can be committed in any previous view. TODO: this will need to be augmented.\<close>
   "safe s b v \<equiv> (\<forall> p' v' b' . \<not> byz p' \<and> v' < v \<and> (s\<cdot>committed) p' v' b' \<longrightarrow> b' \<le> b)"
 
 definition inv4 where
@@ -62,6 +62,7 @@ definition commit where
       \<not> byz p
     \<and> (v = (s\<cdot>view) p)
     \<and> (\<forall> p' . p' \<in> q \<and> \<not> byz p' \<longrightarrow> (s\<cdot>prepared) p' v b)
+    \<and> (\<forall> p' v' b'. v' > v \<and> \<not> byz p' \<and> (s\<cdot>pre_prepared) p' v' b' \<longrightarrow> compatible b b' \<and> (b \<le> b'))
     \<and> s' = s<committed := (s\<cdot>committed)(p := ((s\<cdot>committed) p)(v := ((s\<cdot>committed) p v)(b := True)))>"
 
 definition prepare where
@@ -226,10 +227,10 @@ next
     then show "inv4 s'"
     proof (elim disjE)
       assume "commit s s' p q v b"
-      \<comment> \<open>commit doesn't change pre_prepared, but adds to committed - need to show safety preserved\<close>
-      \<comment> \<open>This case may require inv0 to complete - for now, leave as sorry\<close>
-      thus ?thesis using inv4 unfolding inv4_def commit_def safe_def 
-        sorry
+      \<comment> \<open>commit doesn't change pre_prepared, but adds to committed\<close>
+      \<comment> \<open>New precondition ensures compatibility with blocks pre-prepared at higher views\<close>
+      thus ?thesis using inv4 unfolding inv4_def commit_def safe_def
+        by auto
     next
       assume "prepare s s' p q v b"
       \<comment> \<open>prepare doesn't change pre_prepared or committed\<close>
