@@ -251,12 +251,12 @@ lemma safe_sanity_check_2:
   assumes "safe s b v" and "trans_rel s s' p q v' b'"
   shows "safe s' b v"
 proof -
-  from assms(1) obtain v_wit where v_wit:
+  from \<open>safe s b v\<close> obtain v_wit where v_wit:
     "v_wit < v"
     "(\<exists> q . \<forall> p . p \<in> q \<and> \<not> byz p \<longrightarrow> (s\<cdot>view) p \<ge> v \<and> (\<forall> v'' b'' . v_wit < v'' \<and> v'' < v \<longrightarrow> \<not>(s\<cdot>prepared) p v'' b''))"
     "(\<exists> p b'. \<not> byz p \<and> b' \<le> b \<and> (s\<cdot>pre_prepared) p v_wit b')"
     unfolding safe_def by blast
-  from assms(2) show "safe s' b v"
+  from \<open>trans_rel s s' p q v' b'\<close> show "safe s' b v"
   proof (cases rule: trans_rel_cases)
     case commit
     thus ?thesis using v_wit unfolding safe_def commit_def by auto
@@ -297,22 +297,78 @@ next
     next
       case prepare
       \<comment> \<open>prepare doesn't change pre_prepared or committed\<close>
-      thus ?thesis using inv4 unfolding inv4_def prepare_def safe_def 
-        by (auto; smt (verit) linorder_not_less)
+      show ?thesis unfolding inv4_def
+      proof (intro allI impI)
+        fix pa va ba
+        assume "\<not> byz pa \<and> (s'\<cdot>pre_prepared) pa va ba"
+        then have "\<not> byz pa" and "(s\<cdot>pre_prepared) pa va ba"
+          using prepare unfolding prepare_def by auto
+        from \<open>inv4 s\<close> \<open>\<not> byz pa\<close> \<open>(s\<cdot>pre_prepared) pa va ba\<close> have "safe s ba va"
+          unfolding inv4_def by blast
+        with prepare show "safe s' ba va"
+          using safe_sanity_check_2[of s ba va s' p q v b] 
+          unfolding trans_rel_def by blast
+      qed
     next
       case pre_prepare
-      \<comment> \<open>pre_prepare adds to pre_prepared, doesn't change committed\<close>
-      thus ?thesis using inv4 unfolding inv4_def pre_prepare_def safe_def 
-        by (auto; metis)
+      \<comment> \<open>pre_prepare adds to pre_prepared with safe precondition\<close>
+      show ?thesis unfolding inv4_def
+      proof (intro allI impI)
+        fix pa va ba
+        assume "\<not> byz pa \<and> (s'\<cdot>pre_prepared) pa va ba"
+        then have pa_correct: "\<not> byz pa" by blast
+        from \<open>\<not> byz pa \<and> (s'\<cdot>pre_prepared) pa va ba\<close> pre_prepare 
+        have pre_in_s': "(s'\<cdot>pre_prepared) pa va ba" by blast
+        show "safe s' ba va"
+        proof (cases "pa = p \<and> va = v \<and> ba = b")
+          case True
+          \<comment> \<open>Newly pre-prepared block, safe by precondition\<close>
+          from pre_prepare have "safe s b v" unfolding pre_prepare_def by blast
+          with True show ?thesis 
+            using safe_sanity_check_2[of s ba va s' p q v b] pre_prepare
+            unfolding trans_rel_def by blast
+        next
+          case False
+          \<comment> \<open>Already pre-prepared in s, inv4 s gives safety\<close>
+          from False pre_in_s' pre_prepare have "(s\<cdot>pre_prepared) pa va ba"
+            unfolding pre_prepare_def by (auto split: if_splits)
+          from \<open>inv4 s\<close> pa_correct this have "safe s ba va"
+            unfolding inv4_def by blast
+          thus ?thesis 
+            using safe_sanity_check_2[of s ba va s' p q v b] pre_prepare
+            unfolding trans_rel_def by blast
+        qed
+      qed
     next
       case change_view
       \<comment> \<open>change_view doesn't change pre_prepared or committed\<close>
-      thus ?thesis using inv4 unfolding inv4_def change_view_def safe_def 
-        by (auto; smt (verit) nless_le order_trans)
+      show ?thesis unfolding inv4_def
+      proof (intro allI impI)
+        fix pa va ba
+        assume "\<not> byz pa \<and> (s'\<cdot>pre_prepared) pa va ba"
+        then have "\<not> byz pa" and "(s\<cdot>pre_prepared) pa va ba"
+          using change_view unfolding change_view_def by auto
+        from \<open>inv4 s\<close> \<open>\<not> byz pa\<close> \<open>(s\<cdot>pre_prepared) pa va ba\<close> have "safe s ba va"
+          unfolding inv4_def by blast
+        with change_view show "safe s' ba va"
+          using safe_sanity_check_2[of s ba va s' p q v b] 
+          unfolding trans_rel_def by blast
+      qed
     next
       case byzantine_havoc
       \<comment> \<open>byzantine_havoc preserves all correct parties' state\<close>
-      thus ?thesis using inv4 unfolding inv4_def byzantine_havoc_def safe_def by force
+      show ?thesis unfolding inv4_def
+      proof (intro allI impI)
+        fix pa va ba
+        assume "\<not> byz pa \<and> (s'\<cdot>pre_prepared) pa va ba"
+        then have "\<not> byz pa" and "(s\<cdot>pre_prepared) pa va ba"
+          using byzantine_havoc unfolding byzantine_havoc_def by auto
+        from \<open>inv4 s\<close> \<open>\<not> byz pa\<close> \<open>(s\<cdot>pre_prepared) pa va ba\<close> have "safe s ba va"
+          unfolding inv4_def by blast
+        with byzantine_havoc show "safe s' ba va"
+          using safe_sanity_check_2[of s ba va s' p q v b] 
+          unfolding trans_rel_def by blast
+      qed
     qed
   qed
 qed
