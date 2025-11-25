@@ -7,7 +7,7 @@ definition compatible where
 
 statespace ('p, 'v, 'b) vars =
   committed :: "'p \<Rightarrow> 'v::linorder \<Rightarrow> 'b::order \<Rightarrow> bool"
-  prepared :: "'p \<Rightarrow>  'v \<Rightarrow> 'b \<Rightarrow> bool"
+  prepared :: "'p \<Rightarrow> 'v \<Rightarrow> 'b \<Rightarrow> bool"
   pre_prepared :: "'p \<Rightarrow> 'v \<Rightarrow> 'b \<Rightarrow> bool"
   view :: "'p \<Rightarrow> 'v"
 
@@ -42,8 +42,18 @@ definition inv3 where
   "inv3 s \<equiv> \<forall> p v b b' . \<not> byz p \<and> (s\<cdot>pre_prepared) p v b \<and> (s\<cdot>pre_prepared) p v b' \<longrightarrow> b = b'"
 
 definition safe where
-  \<comment> \<open>A block b is safe in view v when no block that is incompatible or longer can be committed in any previous view. TODO: this will need to be augmented.\<close>
-  "safe s b v \<equiv> (\<forall> p' v' b' . \<not> byz p' \<and> v' < v \<and> (s\<cdot>committed) p' v' b' \<longrightarrow> b' \<le> b)"
+  \<comment> \<open>A block b is safe in view v when no block that is incompatible or longer can ever be committed in any previous view.\<close>
+  "safe s b v \<equiv> \<exists> v' . v' < v
+    \<and> (\<exists> q . \<forall> p . p \<in> q \<and> \<not> byz p \<longrightarrow>
+           (s\<cdot>view) p \<ge> v
+        \<and> (\<forall> v'' b'' . v' < v'' \<and> v'' < v \<longrightarrow> \<not>(s\<cdot>prepared) p v'' b''))
+    \<and> (\<exists> p b' . \<not> byz p \<and> b' \<le> b \<and> (s\<cdot>pre_prepared) p v' b')"
+
+lemma safe_sanity_check_1:
+  assumes "safe s b v" and "b \<le> b'"
+  shows "safe s b' v"
+  using assms unfolding safe_def
+  by (meson order.trans)
 
 definition inv4 where
   \<comment> \<open>If a party pre-prepares a block b in view v, then b is safe in v\<close>
@@ -237,6 +247,36 @@ next
   qed
 qed
 
+lemma safe_sanity_check_2:
+  assumes "safe s b v" and "trans_rel s s' p q v' b'"
+  shows "safe s' b v"
+proof -
+  from assms(1) obtain v_wit where v_wit:
+    "v_wit < v"
+    "(\<exists> q . \<forall> p . p \<in> q \<and> \<not> byz p \<longrightarrow> (s\<cdot>view) p \<ge> v \<and> (\<forall> v'' b'' . v_wit < v'' \<and> v'' < v \<longrightarrow> \<not>(s\<cdot>prepared) p v'' b''))"
+    "(\<exists> p b'. \<not> byz p \<and> b' \<le> b \<and> (s\<cdot>pre_prepared) p v_wit b')"
+    unfolding safe_def by blast
+  from assms(2) show "safe s' b v"
+  proof (cases rule: trans_rel_cases)
+    case commit
+    thus ?thesis using v_wit unfolding safe_def commit_def by auto
+  next
+    case prepare
+    thus ?thesis using v_wit unfolding safe_def prepare_def
+      by (auto; smt (verit) linorder_not_less)
+  next
+    case pre_prepare
+    thus ?thesis using v_wit unfolding safe_def pre_prepare_def by (auto; metis)
+  next
+    case change_view
+    thus ?thesis using v_wit unfolding safe_def change_view_def 
+      by (auto; smt (verit) nless_le order_trans)
+  next
+    case byzantine_havoc
+    thus ?thesis using v_wit unfolding safe_def byzantine_havoc_def by force
+  qed
+qed
+
 lemma inv4_inductive:
   shows "init s \<Longrightarrow> inv4 s" and "trans_rel s s' p q v b \<and> inv4 s \<Longrightarrow> inv4 s'"
 proof -
@@ -257,19 +297,22 @@ next
     next
       case prepare
       \<comment> \<open>prepare doesn't change pre_prepared or committed\<close>
-      thus ?thesis using inv4 unfolding inv4_def prepare_def safe_def by auto
+      thus ?thesis using inv4 unfolding inv4_def prepare_def safe_def 
+        by (auto; smt (verit) linorder_not_less)
     next
       case pre_prepare
       \<comment> \<open>pre_prepare adds to pre_prepared, doesn't change committed\<close>
-      thus ?thesis using inv4 unfolding inv4_def pre_prepare_def safe_def by auto
+      thus ?thesis using inv4 unfolding inv4_def pre_prepare_def safe_def 
+        by (auto; metis)
     next
       case change_view
       \<comment> \<open>change_view doesn't change pre_prepared or committed\<close>
-      thus ?thesis using inv4 unfolding inv4_def change_view_def safe_def by auto
+      thus ?thesis using inv4 unfolding inv4_def change_view_def safe_def 
+        by (auto; smt (verit) nless_le order_trans)
     next
       case byzantine_havoc
       \<comment> \<open>byzantine_havoc preserves all correct parties' state\<close>
-      thus ?thesis using inv4 unfolding inv4_def byzantine_havoc_def safe_def by auto
+      thus ?thesis using inv4 unfolding inv4_def byzantine_havoc_def safe_def by force
     qed
   qed
 qed
