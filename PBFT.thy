@@ -25,7 +25,9 @@ begin
 
 definition inv0 where
   \<comment> \<open>No correct party has pre-prepared, prepared, or committed anything after its current view\<close>
-  "inv0 s \<equiv> undefined"
+  "inv0 s \<equiv> \<forall> p v b. \<not> byz p \<longrightarrow> 
+    ((s\<cdot>pre_prepared) p v b \<or> (s\<cdot>prepared) p v b \<or> (s\<cdot>committed) p v b) \<longrightarrow> 
+    v \<le> (s\<cdot>view) p"
 
 definition inv1 where
   \<comment> \<open>If a party commits a block, then a quorum has prepared it\<close>
@@ -71,18 +73,61 @@ definition prepare where
 
 definition pre_prepare where
   \<comment> \<open>pre-prepare a safe block\<close>
-  "pre_prepare s s' p v b \<equiv> undefined"
+  "pre_prepare s s' p v b \<equiv>
+      \<not> byz p
+    \<and> (v = (s\<cdot>view) p)
+    \<and> safe s b v
+    \<and> s' = s<pre_prepared := (s\<cdot>pre_prepared)(p := ((s\<cdot>pre_prepared) p)(v := ((s\<cdot>pre_prepared) p v)(b := True)))>"
 
 definition change_view where
   \<comment> \<open>Start a higher view\<close>
-  "change_view s s' p v \<equiv> undefined"
+  "change_view s s' p v \<equiv>
+      \<not> byz p
+    \<and> (s\<cdot>view) p < v
+    \<and> s' = s<view := (s\<cdot>view)(p := v)>"
 
 definition trans_rel where
   "trans_rel s s' p q v b \<equiv>
       commit s s' p q v b
-    \<or> prepare s s' p q v b"
+    \<or> prepare s s' p q v b
+    \<or> pre_prepare s s' p v b
+    \<or> change_view s s' p v"
 
 section \<open>Induction proofs\<close>
+
+lemma inv0_inductive:
+  shows "init s \<Longrightarrow> inv0 s" and "trans_rel s s' p q v b \<and> inv0 s \<Longrightarrow> inv0 s'"
+proof -
+  show "init s \<Longrightarrow> inv0 s"
+    by (simp add: init_def inv0_def)
+next
+  show "trans_rel s s' p q v b \<and> inv0 s \<Longrightarrow> inv0 s'"
+  proof -
+    assume asm: "trans_rel s s' p q v b \<and> inv0 s"
+    then have inv0: "inv0 s" by simp
+    from asm have "commit s s' p q v b \<or> prepare s s' p q v b \<or> pre_prepare s s' p v b \<or> change_view s s' p v"
+      unfolding trans_rel_def by simp
+    then show "inv0 s'"
+    proof (elim disjE)
+      assume "commit s s' p q v b"
+      \<comment> \<open>commit doesn't change view or any pre_prepared/prepared fields\<close>
+      thus ?thesis using inv0 unfolding inv0_def commit_def by auto
+    next
+      assume "prepare s s' p q v b"
+      \<comment> \<open>prepare doesn't change view or any pre_prepared/committed fields\<close>
+      thus ?thesis using inv0 unfolding inv0_def prepare_def by auto
+    next
+      assume "pre_prepare s s' p v b"
+      \<comment> \<open>pre_prepare doesn't change view or any prepared/committed fields\<close>
+      thus ?thesis using inv0 unfolding inv0_def pre_prepare_def by auto
+    next
+      assume "change_view s s' p v"
+      \<comment> \<open>change_view only increases view for one party, preserves all prepared/committed/pre_prepared\<close>
+      thus ?thesis using inv0 unfolding inv0_def change_view_def 
+        by (auto; metis order.strict_implies_order order.trans)
+    qed
+  qed
+qed
 
 lemma inv1_inductive:
   shows "init s \<Longrightarrow> inv1 s" and "trans_rel s s' p q v b \<and> inv1 s \<Longrightarrow> inv1 s'"
