@@ -90,13 +90,12 @@ definition change_view where
 
 definition byzantine_havoc where
   \<comment> \<open>Byzantine parties can do arbitrary state changes, but correct parties' state is preserved\<close>
-  "byzantine_havoc s s' p \<equiv>
-      byz p
-    \<and> (\<forall> p' v b. \<not> byz p' \<longrightarrow> 
+  "byzantine_havoc s s' \<equiv>
+    \<forall> p' v b. \<not> byz p' \<longrightarrow> 
         (s'\<cdot>committed) p' v b = (s\<cdot>committed) p' v b \<and>
         (s'\<cdot>prepared) p' v b = (s\<cdot>prepared) p' v b \<and>
         (s'\<cdot>pre_prepared) p' v b = (s\<cdot>pre_prepared) p' v b \<and>
-        (s'\<cdot>view) p' = (s\<cdot>view) p')"
+        (s'\<cdot>view) p' = (s\<cdot>view) p'"
 
 definition trans_rel where
   "trans_rel s s' p q v b \<equiv>
@@ -104,7 +103,7 @@ definition trans_rel where
     \<or> prepare s s' p q v b
     \<or> pre_prepare s s' p v b
     \<or> change_view s s' p v
-    \<or> byzantine_havoc s s' p"
+    \<or> byzantine_havoc s s'"
 
 lemma trans_rel_cases[consumes 1, case_names commit prepare pre_prepare change_view byzantine_havoc]:
   assumes "trans_rel s s' p q v b"
@@ -112,7 +111,7 @@ lemma trans_rel_cases[consumes 1, case_names commit prepare pre_prepare change_v
     | (prepare) "prepare s s' p q v b"
     | (pre_prepare) "pre_prepare s s' p v b"
     | (change_view) "change_view s s' p v"
-    | (byzantine_havoc) "byzantine_havoc s s' p"
+    | (byzantine_havoc) "byzantine_havoc s s'"
   using assms unfolding trans_rel_def by blast
 
 section \<open>Induction proofs\<close>
