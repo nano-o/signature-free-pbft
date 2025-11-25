@@ -77,6 +77,7 @@ definition pre_prepare where
       \<not> byz p
     \<and> (v = (s\<cdot>view) p)
     \<and> safe s b v
+    \<and> (\<forall> b' . \<not>((s\<cdot>pre_prepared) p v b'))
     \<and> s' = s<pre_prepared := (s\<cdot>pre_prepared)(p := ((s\<cdot>pre_prepared) p)(v := ((s\<cdot>pre_prepared) p v)(b := True)))>"
 
 definition change_view where
@@ -136,10 +137,10 @@ proof -
     by (simp add: init_def inv1_def)
 next
   show "trans_rel s s' p q v b \<and> inv1 s \<Longrightarrow> inv1 s'"
-    unfolding trans_rel_def commit_def prepare_def inv1_def
+    unfolding trans_rel_def commit_def prepare_def pre_prepare_def change_view_def inv1_def
     apply auto
         apply (smt (verit) fun_upd_apply)
-       apply meson+
+         apply meson+
     done
 qed
 
@@ -150,21 +151,64 @@ proof -
     by (simp add: init_def inv2_def)
 next
   show "trans_rel s s' p q v b \<and> inv2 s \<Longrightarrow> inv2 s'"
-    unfolding trans_rel_def
-    apply (auto; simp add: commit_def prepare_def inv2_def; auto)
-    done
+  proof -
+    assume asm: "trans_rel s s' p q v b \<and> inv2 s"
+    then have inv2: "inv2 s" by simp
+    from asm have "commit s s' p q v b \<or> prepare s s' p q v b \<or> pre_prepare s s' p v b \<or> change_view s s' p v"
+      unfolding trans_rel_def by simp
+    then show "inv2 s'"
+    proof (elim disjE)
+      assume "commit s s' p q v b"
+      \<comment> \<open>commit doesn't change prepared or pre_prepared\<close>
+      thus ?thesis using inv2 unfolding inv2_def commit_def by auto
+    next
+      assume "prepare s s' p q v b"
+      \<comment> \<open>prepare adds to prepared, doesn't change pre_prepared\<close>
+      thus ?thesis using inv2 unfolding inv2_def prepare_def by auto
+    next
+      assume "pre_prepare s s' p v b"
+      \<comment> \<open>pre_prepare adds to pre_prepared, doesn't change prepared\<close>
+      thus ?thesis using inv2 unfolding inv2_def pre_prepare_def 
+        by (auto; metis)
+    next
+      assume "change_view s s' p v"
+      \<comment> \<open>change_view doesn't change prepared or pre_prepared\<close>
+      thus ?thesis using inv2 unfolding inv2_def change_view_def by auto
+    qed
+  qed
 qed
 
 lemma inv3_inductive:
   shows "init s \<Longrightarrow> inv3 s" and "trans_rel s s' p q v b \<and> inv3 s \<Longrightarrow> inv3 s'"
-proof -
+proof -                                                              
   show "init s \<Longrightarrow> inv3 s"
     by (simp add: init_def inv3_def)
 next
   show "trans_rel s s' p q v b \<and> inv3 s \<Longrightarrow> inv3 s'"
-    unfolding trans_rel_def
-    apply (auto; simp add: commit_def prepare_def inv3_def; auto)
-    done
+  proof -
+    assume asm: "trans_rel s s' p q v b \<and> inv3 s"
+    then have inv3: "inv3 s" by simp
+    from asm have "commit s s' p q v b \<or> prepare s s' p q v b \<or> pre_prepare s s' p v b \<or> change_view s s' p v"
+      unfolding trans_rel_def by simp
+    then show "inv3 s'"
+    proof (elim disjE)
+      assume "commit s s' p q v b"
+      \<comment> \<open>commit doesn't change pre_prepared\<close>
+      thus ?thesis using inv3 unfolding inv3_def commit_def by auto
+    next
+      assume "prepare s s' p q v b"
+      \<comment> \<open>prepare doesn't change pre_prepared\<close>
+      thus ?thesis using inv3 unfolding inv3_def prepare_def by auto
+    next
+      assume "pre_prepare s s' p v b"
+      \<comment> \<open>pre_prepare adds one block to pre_prepared for party p at view v, guaranteed fresh\<close>
+      thus ?thesis using inv3 unfolding inv3_def pre_prepare_def by auto
+    next
+      assume "change_view s s' p v"
+      \<comment> \<open>change_view doesn't change pre_prepared\<close>
+      thus ?thesis using inv3 unfolding inv3_def change_view_def by auto
+    qed
+  qed
 qed
 
 lemma inv4_inductive:
@@ -176,21 +220,28 @@ next
   show "trans_rel s s' p q v b \<and> inv4 s \<Longrightarrow> inv4 s'"
   proof -
     assume asm: "trans_rel s s' p q v b \<and> inv4 s"
-    then have "commit s s' p q v b \<or> prepare s s' p q v b"
+    then have inv4: "inv4 s" by simp
+    from asm have "commit s s' p q v b \<or> prepare s s' p q v b \<or> pre_prepare s s' p v b \<or> change_view s s' p v"
       unfolding trans_rel_def by simp
     then show "inv4 s'"
-    proof
+    proof (elim disjE)
       assume "commit s s' p q v b"
-      \<comment> \<open>Case 1: commit transition - show inv4 s'\<close>
-      \<comment> \<open>Key idea: pre_prepared is unchanged by commit, so anything pre-prepared in s' was already pre-prepared in s\<close>
-      show ?thesis
+      \<comment> \<open>commit doesn't change pre_prepared, but adds to committed - need to show safety preserved\<close>
+      \<comment> \<open>This case may require inv0 to complete - for now, leave as sorry\<close>
+      thus ?thesis using inv4 unfolding inv4_def commit_def safe_def 
         sorry
     next
       assume "prepare s s' p q v b"
-      \<comment> \<open>Case 2: prepare transition - show inv4 s'\<close>
-      \<comment> \<open>Key idea: pre_prepared is unchanged by prepare, so anything pre-prepared in s' was already pre-prepared in s\<close>
-      show ?thesis
-        using \<open>prepare s s' p q v b\<close> asm inv4_def prepare_def safe_def by auto
+      \<comment> \<open>prepare doesn't change pre_prepared or committed\<close>
+      thus ?thesis using inv4 unfolding inv4_def prepare_def safe_def by auto
+    next
+      assume "pre_prepare s s' p v b"
+      \<comment> \<open>pre_prepare adds to pre_prepared, doesn't change committed\<close>
+      thus ?thesis using inv4 unfolding inv4_def pre_prepare_def safe_def by auto
+    next
+      assume "change_view s s' p v"
+      \<comment> \<open>change_view doesn't change pre_prepared or committed\<close>
+      thus ?thesis using inv4 unfolding inv4_def change_view_def safe_def by auto
     qed
   qed
   oops
