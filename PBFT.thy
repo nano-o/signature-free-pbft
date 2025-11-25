@@ -106,6 +106,15 @@ definition trans_rel where
     \<or> change_view s s' p v
     \<or> byzantine_havoc s s' p"
 
+lemma trans_rel_cases[consumes 1, case_names commit prepare pre_prepare change_view byzantine_havoc]:
+  assumes "trans_rel s s' p q v b"
+  obtains (commit) "commit s s' p q v b"
+    | (prepare) "prepare s s' p q v b"
+    | (pre_prepare) "pre_prepare s s' p v b"
+    | (change_view) "change_view s s' p v"
+    | (byzantine_havoc) "byzantine_havoc s s' p"
+  using assms unfolding trans_rel_def by blast
+
 section \<open>Induction proofs\<close>
 
 lemma inv0_inductive:
@@ -117,29 +126,27 @@ next
   show "trans_rel s s' p q v b \<and> inv0 s \<Longrightarrow> inv0 s'"
   proof -
     assume asm: "trans_rel s s' p q v b \<and> inv0 s"
-    then have inv0: "inv0 s" by simp
-    from asm have "commit s s' p q v b \<or> prepare s s' p q v b \<or> pre_prepare s s' p v b \<or> change_view s s' p v \<or> byzantine_havoc s s' p"
-      unfolding trans_rel_def by simp
-    then show "inv0 s'"
-    proof (elim disjE)
-      assume "commit s s' p q v b"
+    then have inv0: "inv0 s" and trans: "trans_rel s s' p q v b" by simp_all
+    from trans show "inv0 s'"
+    proof (cases rule: trans_rel_cases)
+      case commit
       \<comment> \<open>commit doesn't change view or any pre_prepared/prepared fields\<close>
       thus ?thesis using inv0 unfolding inv0_def commit_def by auto
     next
-      assume "prepare s s' p q v b"
+      case prepare
       \<comment> \<open>prepare doesn't change view or any pre_prepared/committed fields\<close>
       thus ?thesis using inv0 unfolding inv0_def prepare_def by auto
     next
-      assume "pre_prepare s s' p v b"
+      case pre_prepare
       \<comment> \<open>pre_prepare doesn't change view or any prepared/committed fields\<close>
       thus ?thesis using inv0 unfolding inv0_def pre_prepare_def by auto
     next
-      assume "change_view s s' p v"
+      case change_view
       \<comment> \<open>change_view only increases view for one party, preserves all prepared/committed/pre_prepared\<close>
       thus ?thesis using inv0 unfolding inv0_def change_view_def 
         by (auto; metis order.strict_implies_order order.trans)
     next
-      assume "byzantine_havoc s s' p"
+      case byzantine_havoc
       \<comment> \<open>byzantine_havoc preserves all correct parties' state\<close>
       thus ?thesis using inv0 unfolding inv0_def byzantine_havoc_def by auto
     qed
@@ -169,29 +176,27 @@ next
   show "trans_rel s s' p q v b \<and> inv2 s \<Longrightarrow> inv2 s'"
   proof -
     assume asm: "trans_rel s s' p q v b \<and> inv2 s"
-    then have inv2: "inv2 s" by simp
-    from asm have "commit s s' p q v b \<or> prepare s s' p q v b \<or> pre_prepare s s' p v b \<or> change_view s s' p v \<or> byzantine_havoc s s' p"
-      unfolding trans_rel_def by simp
-    then show "inv2 s'"
-    proof (elim disjE)
-      assume "commit s s' p q v b"
+    then have inv2: "inv2 s" and trans: "trans_rel s s' p q v b" by simp_all
+    from trans show "inv2 s'"
+    proof (cases rule: trans_rel_cases)
+      case commit
       \<comment> \<open>commit doesn't change prepared or pre_prepared\<close>
       thus ?thesis using inv2 unfolding inv2_def commit_def by auto
     next
-      assume "prepare s s' p q v b"
+      case prepare
       \<comment> \<open>prepare adds to prepared, doesn't change pre_prepared\<close>
       thus ?thesis using inv2 unfolding inv2_def prepare_def by auto
     next
-      assume "pre_prepare s s' p v b"
+      case pre_prepare
       \<comment> \<open>pre_prepare adds to pre_prepared, doesn't change prepared\<close>
       thus ?thesis using inv2 unfolding inv2_def pre_prepare_def 
         by (auto; metis)
     next
-      assume "change_view s s' p v"
+      case change_view
       \<comment> \<open>change_view doesn't change prepared or pre_prepared\<close>
       thus ?thesis using inv2 unfolding inv2_def change_view_def by auto
     next
-      assume "byzantine_havoc s s' p"
+      case byzantine_havoc
       \<comment> \<open>byzantine_havoc preserves all correct parties' state\<close>
       thus ?thesis using inv2 unfolding inv2_def byzantine_havoc_def by auto
     qed
@@ -207,28 +212,26 @@ next
   show "trans_rel s s' p q v b \<and> inv3 s \<Longrightarrow> inv3 s'"
   proof -
     assume asm: "trans_rel s s' p q v b \<and> inv3 s"
-    then have inv3: "inv3 s" by simp
-    from asm have "commit s s' p q v b \<or> prepare s s' p q v b \<or> pre_prepare s s' p v b \<or> change_view s s' p v \<or> byzantine_havoc s s' p"
-      unfolding trans_rel_def by simp
-    then show "inv3 s'"
-    proof (elim disjE)
-      assume "commit s s' p q v b"
+    then have inv3: "inv3 s" and trans: "trans_rel s s' p q v b" by simp_all
+    from trans show "inv3 s'"
+    proof (cases rule: trans_rel_cases)
+      case commit
       \<comment> \<open>commit doesn't change pre_prepared\<close>
       thus ?thesis using inv3 unfolding inv3_def commit_def by auto
     next
-      assume "prepare s s' p q v b"
+      case prepare
       \<comment> \<open>prepare doesn't change pre_prepared\<close>
       thus ?thesis using inv3 unfolding inv3_def prepare_def by auto
     next
-      assume "pre_prepare s s' p v b"
+      case pre_prepare
       \<comment> \<open>pre_prepare adds one block to pre_prepared for party p at view v, guaranteed fresh\<close>
       thus ?thesis using inv3 unfolding inv3_def pre_prepare_def by auto
     next
-      assume "change_view s s' p v"
+      case change_view
       \<comment> \<open>change_view doesn't change pre_prepared\<close>
       thus ?thesis using inv3 unfolding inv3_def change_view_def by auto
     next
-      assume "byzantine_havoc s s' p"
+      case byzantine_havoc
       \<comment> \<open>byzantine_havoc preserves all correct parties' state\<close>
       thus ?thesis using inv3 unfolding inv3_def byzantine_havoc_def by auto
     qed
@@ -244,30 +247,28 @@ next
   show "trans_rel s s' p q v b \<and> inv4 s \<Longrightarrow> inv4 s'"
   proof -
     assume asm: "trans_rel s s' p q v b \<and> inv4 s"
-    then have inv4: "inv4 s" by simp
-    from asm have "commit s s' p q v b \<or> prepare s s' p q v b \<or> pre_prepare s s' p v b \<or> change_view s s' p v \<or> byzantine_havoc s s' p"
-      unfolding trans_rel_def by simp
-    then show "inv4 s'"
-    proof (elim disjE)
-      assume "commit s s' p q v b"
+    then have inv4: "inv4 s" and trans: "trans_rel s s' p q v b" by simp_all
+    from trans show "inv4 s'"
+    proof (cases rule: trans_rel_cases)
+      case commit
       \<comment> \<open>commit doesn't change pre_prepared, but adds to committed\<close>
       \<comment> \<open>New precondition ensures compatibility with blocks pre-prepared at higher views\<close>
       thus ?thesis using inv4 unfolding inv4_def commit_def safe_def
         by auto
     next
-      assume "prepare s s' p q v b"
+      case prepare
       \<comment> \<open>prepare doesn't change pre_prepared or committed\<close>
       thus ?thesis using inv4 unfolding inv4_def prepare_def safe_def by auto
     next
-      assume "pre_prepare s s' p v b"
+      case pre_prepare
       \<comment> \<open>pre_prepare adds to pre_prepared, doesn't change committed\<close>
       thus ?thesis using inv4 unfolding inv4_def pre_prepare_def safe_def by auto
     next
-      assume "change_view s s' p v"
+      case change_view
       \<comment> \<open>change_view doesn't change pre_prepared or committed\<close>
       thus ?thesis using inv4 unfolding inv4_def change_view_def safe_def by auto
     next
-      assume "byzantine_havoc s s' p"
+      case byzantine_havoc
       \<comment> \<open>byzantine_havoc preserves all correct parties' state\<close>
       thus ?thesis using inv4 unfolding inv4_def byzantine_havoc_def safe_def by auto
     qed
