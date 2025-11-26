@@ -6,7 +6,7 @@ definition compatible where
   "compatible (b::'b::order) b' \<equiv> b \<le> b' \<or> b' \<le> b"
 
 statespace ('p, 'v, 'b) vars =
-  committed :: "'p \<Rightarrow> 'v::linorder \<Rightarrow> 'b::order \<Rightarrow> bool"
+  committed :: "'p \<Rightarrow> 'v::wellorder \<Rightarrow> 'b::order \<Rightarrow> bool"
   prepared :: "'p \<Rightarrow> 'v \<Rightarrow> 'b \<Rightarrow> bool"
   pre_prepared :: "'p \<Rightarrow> 'v \<Rightarrow> 'b \<Rightarrow> bool"
   view :: "'p \<Rightarrow> 'v"
@@ -17,10 +17,10 @@ no_notation Set.member  (\<open>(\<open>notation=\<open>infix \<in>\<close>\<clo
 print_locale vars
 
 locale pbft = vars _ _ _ _ _ _ project_HOL_bool_'b_fun_'v_fun_'p_fun
-  for  project_HOL_bool_'b_fun_'v_fun_'p_fun :: "_ \<Rightarrow> 'p \<Rightarrow> 'v::linorder \<Rightarrow> 'b::order \<Rightarrow> bool" + \<comment> \<open>boilerplate to unify type variables\<close>
+  for  project_HOL_bool_'b_fun_'v_fun_'p_fun :: "_ \<Rightarrow> 'p \<Rightarrow> 'v::wellorder \<Rightarrow> 'b::order \<Rightarrow> bool" + \<comment> \<open>boilerplate to unify type variables\<close>
   fixes quorum_member :: "'p \<Rightarrow> 'q \<Rightarrow> bool" (infix "\<in>" 50)
     and byz :: "'p \<Rightarrow> bool"
-  assumes "\<And> q1 q2 . \<exists> p . \<not> byz p \<and> p \<in> q1 \<and> p \<in> q2" \<comment> \<open>quorum intersection\<close>
+  assumes quorum_intersection:"\<And> q1 q2 . \<exists> p . \<not> byz p \<and> p \<in> q1 \<and> p \<in> q2" \<comment> \<open>quorum intersection\<close>
 begin
 
 definition inv0 where
@@ -30,34 +30,33 @@ definition inv0 where
     v \<le> (s\<cdot>view) p"
 
 definition inv1 where
-  \<comment> \<open>If a party commits a block, then a quorum has prepared it\<close>
+  \<comment> \<open>If a correct party commits a block, then a quorum has prepared it\<close>
   "inv1 s \<equiv> \<forall> p v b . \<not> byz p \<and> (s\<cdot>committed) p v b \<longrightarrow> (\<exists> q . \<forall> p' . p' \<in> q \<and> \<not> byz p' \<longrightarrow> (s\<cdot>prepared) p' v b)"
 
 definition inv2 where
-  \<comment> \<open>If a party prepares a block, then a quorum has pre-prepared it\<close>
+  \<comment> \<open>If a correct party prepares a block, then a quorum has pre-prepared it\<close>
   "inv2 s \<equiv> \<forall> p v b . \<not> byz p \<and> (s\<cdot>prepared) p v b \<longrightarrow> (\<exists> q . \<forall> p' . p' \<in> q \<and> \<not> byz p' \<longrightarrow> (s\<cdot>pre_prepared) p' v b)"
 
 definition inv3 where
-  \<comment> \<open>No honest party pre-prepares two different blocks in the same view\<close>
+  \<comment> \<open>An correct party only pre-prepares one block per view\<close>
   "inv3 s \<equiv> \<forall> p v b b' . \<not> byz p \<and> (s\<cdot>pre_prepared) p v b \<and> (s\<cdot>pre_prepared) p v b' \<longrightarrow> b = b'"
 
 definition safe where
-  \<comment> \<open>A block b is safe in view v when no block that is incompatible or longer can ever be committed in any previous view.\<close>
+  \<comment> \<open>This definition implies that a no block that is incompatible or longer than b can ever be committed in views preceding v, and only b can be committed in view v.\<close>
   "safe s b v \<equiv> \<exists> v' . v' < v
     \<and> (\<exists> q . \<forall> p . p \<in> q \<and> \<not> byz p \<longrightarrow>
-           (s\<cdot>view) p \<ge> v
-        \<and> (\<forall> v'' b'' . v' < v'' \<and> v'' < v \<longrightarrow> \<not>(s\<cdot>prepared) p v'' b''))
-    \<and> (\<exists> p b' . \<not> byz p \<and> b' \<le> b \<and> (s\<cdot>pre_prepared) p v' b')"
-
-lemma safe_sanity_check_1:
-  assumes "safe s b v" and "b \<le> b'"
-  shows "safe s b' v"
-  using assms unfolding safe_def
-  by (meson order.trans)
+          (s\<cdot>view) p \<ge> v
+        \<and> (\<forall> v'' b'' . v' < v'' \<and> v'' < v \<longrightarrow> \<not>(s\<cdot>prepared) p v'' b'')
+        \<and> (\<forall> b' . b' \<noteq> b \<longrightarrow> \<not> (s\<cdot>pre_prepared) p v' b'))
+    \<and> (\<exists> p b . \<not> byz p \<and> (s\<cdot>pre_prepared) p v' b)"
 
 definition inv4 where
   \<comment> \<open>If a party pre-prepares a block b in view v, then b is safe in v\<close>
   "inv4 s \<equiv> \<forall> p v b . \<not> byz p \<and> (s\<cdot>pre_prepared) p v b \<longrightarrow> safe s b v"
+
+definition inv5 where
+  \<comment> \<open>No two honest parties prepare different blocks in the same view\<close>
+  "inv5 s \<equiv> \<forall> p p' v b b' . \<not> byz p \<and> \<not> byz p' \<and> (s\<cdot>prepared) p v b \<and> (s\<cdot>prepared) p' v b' \<longrightarrow> b = b'"
 
 section \<open>Specification of the algorithm\<close>
 
@@ -72,15 +71,7 @@ definition commit where
       \<not> byz p
     \<and> (v = (s\<cdot>view) p)
     \<and> (\<forall> p' . p' \<in> q \<and> \<not> byz p' \<longrightarrow> (s\<cdot>prepared) p' v b)
-    \<and> (\<forall> p' v' b'. v' > v \<and> \<not> byz p' \<and> (s\<cdot>pre_prepared) p' v' b' \<longrightarrow> compatible b b' \<and> (b \<le> b'))
     \<and> s' = s<committed := (s\<cdot>committed)(p := ((s\<cdot>committed) p)(v := ((s\<cdot>committed) p v)(b := True)))>"
-
-definition prepare where
-  "prepare s s' p q v b \<equiv>
-      \<not> byz p
-    \<and> (v = (s\<cdot>view) p)
-    \<and> (\<forall> p' . p' \<in> q \<and> \<not> byz p' \<longrightarrow> (s\<cdot>pre_prepared) p' v b)
-    \<and> s' = s<prepared := (s\<cdot>prepared)(p := ((s\<cdot>prepared) p)(v := ((s\<cdot>prepared) p v)(b := True)))>"
 
 definition pre_prepare where
   \<comment> \<open>pre-prepare a safe block\<close>
@@ -90,6 +81,13 @@ definition pre_prepare where
     \<and> safe s b v
     \<and> (\<forall> b' . \<not>((s\<cdot>pre_prepared) p v b'))
     \<and> s' = s<pre_prepared := (s\<cdot>pre_prepared)(p := ((s\<cdot>pre_prepared) p)(v := ((s\<cdot>pre_prepared) p v)(b := True)))>"
+
+definition prepare where
+  "prepare s s' p q v b \<equiv>
+      \<not> byz p
+    \<and> (v = (s\<cdot>view) p)
+    \<and> (\<forall> p' . p' \<in> q \<and> \<not> byz p' \<longrightarrow> (s\<cdot>pre_prepared) p' v b)
+    \<and> s' = s<prepared := (s\<cdot>prepared)(p := ((s\<cdot>prepared) p)(v := ((s\<cdot>prepared) p v)(b := True)))>"
 
 definition change_view where
   \<comment> \<open>Start a higher view\<close>
@@ -251,29 +249,48 @@ lemma safe_sanity_check_2:
   assumes "safe s b v" and "trans_rel s s' p q v' b'"
   shows "safe s' b v"
 proof -
-  from \<open>safe s b v\<close> obtain v_wit where v_wit:
-    "v_wit < v"
-    "(\<exists> q . \<forall> p . p \<in> q \<and> \<not> byz p \<longrightarrow> (s\<cdot>view) p \<ge> v \<and> (\<forall> v'' b'' . v_wit < v'' \<and> v'' < v \<longrightarrow> \<not>(s\<cdot>prepared) p v'' b''))"
-    "(\<exists> p b'. \<not> byz p \<and> b' \<le> b \<and> (s\<cdot>pre_prepared) p v_wit b')"
-    unfolding safe_def by blast
+  from \<open>safe s b v\<close> obtain v_wit q_wit where
+    v_wit_lt: "v_wit < v" and
+    q_wit: "\<forall> pa . pa \<in> q_wit \<and> \<not> byz pa \<longrightarrow>
+          (s\<cdot>view) pa \<ge> v
+        \<and> (\<forall> v'' b'' . v_wit < v'' \<and> v'' < v \<longrightarrow> \<not>(s\<cdot>prepared) pa v'' b'')
+        \<and> (\<forall> bc . bc \<noteq> b \<longrightarrow> \<not> (s\<cdot>pre_prepared) pa v_wit bc)" and
+    witness_exists: "\<exists> pa ba . \<not> byz pa \<and> (s\<cdot>pre_prepared) pa v_wit ba"
+    unfolding safe_def by auto
+  
   from \<open>trans_rel s s' p q v' b'\<close> show "safe s' b v"
   proof (cases rule: trans_rel_cases)
     case commit
-    thus ?thesis using v_wit unfolding safe_def commit_def by auto
+    thus ?thesis using v_wit_lt q_wit witness_exists 
+      unfolding safe_def commit_def by auto
   next
     case prepare
-    thus ?thesis using v_wit unfolding safe_def prepare_def
-      by (auto; smt (verit) linorder_not_less)
+    thus ?thesis using v_wit_lt q_wit witness_exists
+      unfolding safe_def prepare_def
+      by (auto; smt (verit, del_insts) leD)
   next
     case pre_prepare
-    thus ?thesis using v_wit unfolding safe_def pre_prepare_def by (auto; metis)
+    have 
+      q_wit': "\<forall> pa . pa \<in> q_wit \<and> \<not> byz pa \<longrightarrow>
+          (s'\<cdot>view) pa \<ge> v
+        \<and> (\<forall> v'' b'' . v_wit < v'' \<and> v'' < v \<longrightarrow> \<not>(s'\<cdot>prepared) pa v'' b'')
+        \<and> (\<forall> bc . bc \<noteq> b \<longrightarrow> \<not> (s'\<cdot>pre_prepared) pa v_wit bc)" 
+      using v_wit_lt q_wit witness_exists pre_prepare
+      unfolding safe_def pre_prepare_def by auto 
+    have witness_exists': "\<exists> pa ba . \<not> byz pa \<and> (s'\<cdot>pre_prepared) pa v_wit ba" 
+      using v_wit_lt q_wit witness_exists pre_prepare
+      unfolding safe_def pre_prepare_def by auto 
+    show ?thesis
+      using q_wit' safe_def v_wit_lt witness_exists' by blast 
   next
     case change_view
-    thus ?thesis using v_wit unfolding safe_def change_view_def 
-      by (auto; smt (verit) nless_le order_trans)
+    thus ?thesis using v_wit_lt q_wit witness_exists
+      unfolding safe_def change_view_def
+      by (auto; smt (verit) nless_le order_trans) 
   next
     case byzantine_havoc
-    thus ?thesis using v_wit unfolding safe_def byzantine_havoc_def by force
+    thus ?thesis using v_wit_lt q_wit witness_exists
+      unfolding safe_def byzantine_havoc_def by force
   qed
 qed
 
@@ -373,82 +390,91 @@ next
   qed
 qed
 
-lemma l0:
-  fixes s p p' v b b'
-  assumes "inv2 s" and "inv3 s" 
-    and "\<not> byz p" and "\<not>byz p'" 
-    and "(s\<cdot>prepared) p v b" and "(s\<cdot>prepared) p' v b'"
+lemma prepare_blocks_equal:
+  assumes "\<not> byz p'" "(s\<cdot>prepared) p' v b'" 
+    and "\<forall> p'' . p'' \<in> q \<and> \<not> byz p'' \<longrightarrow> (s\<cdot>pre_prepared) p'' v b"
+    and "inv2 s" "inv3 s"
   shows "b = b'"
 proof -
-  \<comment> \<open>From p's prepared message, a quorum pre-prepared b\<close>
-  obtain q1 where q1: "\<forall> p1 . p1 \<in> q1 \<and> \<not> byz p1 \<longrightarrow> (s\<cdot>pre_prepared) p1 v b"
-    using assms(1,3,5) unfolding inv2_def by blast
-  
-  \<comment> \<open>From p''s prepared message, a quorum pre-prepared b'\<close>
-  obtain q2 where q2: "\<forall> p2 . p2 \<in> q2 \<and> \<not> byz p2 \<longrightarrow> (s\<cdot>pre_prepared) p2 v b'"
-    using assms(1,4,6) unfolding inv2_def by blast
-  
-  \<comment> \<open>By quorum intersection, there's an honest party in both quorums\<close>
-  obtain p'' where p'': "\<not> byz p''" "p'' \<in> q1" "p'' \<in> q2"
-    using pbft_axioms unfolding pbft_def pbft_axioms_def by blast
-  
-  \<comment> \<open>This party pre-prepared both b and b'\<close>
-  have "(s\<cdot>pre_prepared) p'' v b" using q1 p'' by blast
-  moreover have "(s\<cdot>pre_prepared) p'' v b'" using q2 p'' by blast
-  
-  \<comment> \<open>By inv3, they must be equal\<close>
-  ultimately show "b = b'"
-    using assms(2) p''(1) unfolding inv3_def by blast
+  from assms(1,2,4) obtain q' where
+    "\<forall> p'' . p'' \<in> q' \<and> \<not> byz p'' \<longrightarrow> (s\<cdot>pre_prepared) p'' v b'"
+    unfolding inv2_def by blast
+  obtain p'' where "\<not> byz p''" "p'' \<in> q" "p'' \<in> q'"
+    using quorum_intersection by blast
+  with assms(3) have "(s\<cdot>pre_prepared) p'' v b" by blast
+  from \<open>\<forall> p'' . p'' \<in> q' \<and> \<not> byz p'' \<longrightarrow> (s\<cdot>pre_prepared) p'' v b'\<close> \<open>\<not> byz p''\<close> \<open>p'' \<in> q'\<close>
+  have "(s\<cdot>pre_prepared) p'' v b'" by blast
+  from assms(5) \<open>\<not> byz p''\<close> \<open>(s\<cdot>pre_prepared) p'' v b\<close> \<open>(s\<cdot>pre_prepared) p'' v b'\<close>
+  show "b = b'" unfolding inv3_def by blast
 qed
 
-lemma l1:
+lemma safe_not_contradicted:
+  assumes "safe s b v" and "v' < v" and "(s\<cdot>committed) p v' b'"
+    and "\<not> byz p"
+    and "inv1 s" and "inv2 s" and "inv3 s" and "inv4 s"
+  shows "b' \<le> b"
+using assms
+proof (induction v arbitrary: b p rule: less_induct)
+  case (less v)
+  \<comment> \<open>Unfold safe to get witness view and quorum\<close>
+  from \<open>safe s b v\<close> obtain v_wit q p_wit b_wit where
+    v_wit_less: "v_wit < v" and
+    q_safe: "\<forall>p. p \<in> q \<and> \<not> byz p \<longrightarrow> (s\<cdot>view) p \<ge> v \<and> (\<forall>v'' b''. v_wit < v'' \<and> v'' < v \<longrightarrow> \<not>(s\<cdot>prepared) p v'' b'')" and
+    p_wit_props: "\<not> byz p_wit" "b_wit \<le> b" "(s\<cdot>pre_prepared) p_wit v_wit b_wit"
+    unfolding safe_def by blast
+  
+  \<comment> \<open>From committed b' at v', get quorum that prepared it\<close>
+  from \<open>(s\<cdot>committed) p v' b'\<close> \<open>\<not> byz p\<close> \<open>inv1 s\<close> obtain q_prep where
+    q_prep: "\<forall>p'. p' \<in> q_prep \<and> \<not> byz p' \<longrightarrow> (s\<cdot>prepared) p' v' b'"
+    unfolding inv1_def by blast
+    
+  \<comment> \<open>Case split on where v' is relative to v_wit\<close>
+  consider (before) "v' < v_wit" | (at) "v' = v_wit" | (between) "v_wit < v' \<and> v' < v"
+    using \<open>v' < v\<close> v_wit_less by force
+  then show ?case
+  proof cases
+    case before
+    \<comment> \<open>v' < v_wit: use induction hypothesis on v_wit\<close>
+    from p_wit_props(1,3) \<open>inv4 s\<close> have "safe s b_wit v_wit"
+      unfolding inv4_def by blast
+    from less.IH[OF v_wit_less this before \<open>(s\<cdot>committed) p v' b'\<close> \<open>\<not> byz p\<close> \<open>inv1 s\<close> \<open>inv2 s\<close> \<open>inv3 s\<close> \<open>inv4 s\<close>]
+    have "b' \<le> b_wit" .
+    with p_wit_props(2) show ?thesis by simp
+  next
+    case at
+    thus ?thesis
+      sorry
+  next
+    case between 
+    \<comment> \<open>v_wit < v' < v: contradiction - quorum q forbids preparing in this range\<close>
+    obtain p'' where "\<not> byz p''" "p'' \<in> q" "p'' \<in> q_prep"
+      using quorum_intersection by blast
+    with q_safe between have "\<not>(s\<cdot>prepared) p'' v' b'" by blast
+    moreover from \<open>p'' \<in> q_prep\<close> \<open>\<not> byz p''\<close> q_prep have "(s\<cdot>prepared) p'' v' b'"
+      by blast
+    ultimately show ?thesis by blast
+  qed
+qed
+
+lemma safety:
   fixes s p v b p' v' b'
-  assumes "inv1 s" and "inv2 s" and "inv3 s" and "inv4 s" and "\<not> byz p" and "\<not> byz p'"
+  assumes "\<not> byz p" and "\<not> byz p'"
     and "(s\<cdot>committed) p v b" and "(s\<cdot>committed) p' v' b'"
+    and "inv1 s" and "inv2 s" and "inv3 s" and "inv4 s"
   shows "compatible b b'"
 proof -
-  \<comment> \<open>Obtain non-Byzantine processes that prepared the blocks\<close>
-  obtain p1 where p1: "\<not> byz p1" "(s\<cdot>prepared) p1 v b"
-    using assms(1,5,7) pbft_axioms unfolding inv1_def pbft_def pbft_axioms_def by blast
-  obtain p2 where p2: "\<not> byz p2" "(s\<cdot>prepared) p2 v' b'"
-    using assms(1,6,8) pbft_axioms unfolding inv1_def pbft_def pbft_axioms_def by blast
-  
-  \<comment> \<open>Case analysis on the relationship between v and v'\<close>
-  consider (less) "v < v'" | (equal) "v = v'" | (greater) "v' < v"
-    by (metis linorder_less_linear)
+  \<comment> \<open>Case split on whether v = v' or not\<close>
+  consider (same_view) "v = v'" | (diff_view) "v \<noteq> v'" by blast
   then show ?thesis
   proof cases
-    case less
-    \<comment> \<open>v < v': need to show b \<le> b' using safety\<close>
-    \<comment> \<open>From p2's prepared message, obtain a quorum that pre-prepared b'\<close>
-    obtain q where q: "\<forall> p'' . p'' \<in> q \<and> \<not> byz p'' \<longrightarrow> (s\<cdot>pre_prepared) p'' v' b'"
-      using assms(2) p2 unfolding inv2_def by blast
-    \<comment> \<open>By quorum intersection, there's an honest party in q\<close>
-    obtain p'' where p'': "\<not> byz p''" "p'' \<in> q"
-      using pbft_axioms unfolding pbft_def pbft_axioms_def by metis
-    \<comment> \<open>This party pre-prepared b' at v', so by inv4, b' is safe at v'\<close>
-    have "(s\<cdot>pre_prepared) p'' v' b'" using q p'' by blast
-    then have "safe s b' v'" using assms(4) p''(1) unfolding inv4_def by blast
-    \<comment> \<open>Since v < v' and p committed b at v, we have b \<le> b'\<close>
-    then have "b \<le> b'" using less assms(5,7) unfolding safe_def by blast
-    thus ?thesis unfolding compatible_def by auto
+    case same_view
+    thus ?thesis using quorum_intersection \<open>inv1 s\<close> \<open>inv2 s\<close> \<open>inv3 s\<close>
+      unfolding inv1_def inv2_def inv3_def
+      by (metis assms(1,2,3,4) compatible_def dual_order.refl)
   next
-    case equal
-    \<comment> \<open>v = v': use l0 to show b = b'\<close>
-    from p1 p2 equal have "b = b'"
-      using l0[OF assms(2,3) p1(1) p2(1)] by simp
-    thus ?thesis unfolding compatible_def by auto
-  next
-    case greater
-    \<comment> \<open>v' < v: symmetric to the less case\<close>
-    obtain q where q: "\<forall> p'' . p'' \<in> q \<and> \<not> byz p'' \<longrightarrow> (s\<cdot>pre_prepared) p'' v b"
-      using assms(2) p1 unfolding inv2_def by blast
-    obtain p'' where p'': "\<not> byz p''" "p'' \<in> q"
-      using pbft_axioms unfolding pbft_def pbft_axioms_def by metis
-    have "(s\<cdot>pre_prepared) p'' v b" using q p'' by blast
-    then have "safe s b v" using assms(4) p''(1) unfolding inv4_def by blast
-    then have "b' \<le> b" using greater assms(6,8) unfolding safe_def by blast
-    thus ?thesis unfolding compatible_def by auto
+    case diff_view
+    \<comment> \<open>Different views: use inv4 and safety\<close>
+    oops
   qed
 qed
 
