@@ -48,7 +48,7 @@ definition safe where
           (s\<cdot>view) p \<ge> v
         \<and> (\<forall> v'' b'' . v' < v'' \<and> v'' < v \<longrightarrow> \<not>(s\<cdot>prepared) p v'' b'')
         \<and> (\<forall> b' . b' \<noteq> b \<longrightarrow> \<not> (s\<cdot>pre_prepared) p v' b'))
-    \<and> (\<exists> p b . \<not> byz p \<and> (s\<cdot>pre_prepared) p v' b)"
+    \<and> (\<exists> p . \<not> byz p \<and> (s\<cdot>pre_prepared) p v' b)"
 
 definition inv4 where
   \<comment> \<open>If a party pre-prepares a block b in view v, then b is safe in v\<close>
@@ -255,7 +255,7 @@ proof -
           (s\<cdot>view) pa \<ge> v
         \<and> (\<forall> v'' b'' . v_wit < v'' \<and> v'' < v \<longrightarrow> \<not>(s\<cdot>prepared) pa v'' b'')
         \<and> (\<forall> bc . bc \<noteq> b \<longrightarrow> \<not> (s\<cdot>pre_prepared) pa v_wit bc)" and
-    witness_exists: "\<exists> pa ba . \<not> byz pa \<and> (s\<cdot>pre_prepared) pa v_wit ba"
+    witness_exists: "\<exists> pa . \<not> byz pa \<and> (s\<cdot>pre_prepared) pa v_wit b"
     unfolding safe_def by auto
   
   from \<open>trans_rel s s' p q v' b'\<close> show "safe s' b v"
@@ -277,11 +277,12 @@ proof -
         \<and> (\<forall> bc . bc \<noteq> b \<longrightarrow> \<not> (s'\<cdot>pre_prepared) pa v_wit bc)" 
       using v_wit_lt q_wit witness_exists pre_prepare
       unfolding safe_def pre_prepare_def by auto 
-    have witness_exists': "\<exists> pa ba . \<not> byz pa \<and> (s'\<cdot>pre_prepared) pa v_wit ba" 
+    have witness_exists': "\<exists> pa . \<not> byz pa \<and> (s'\<cdot>pre_prepared) pa v_wit b" 
       using v_wit_lt q_wit witness_exists pre_prepare
       unfolding safe_def pre_prepare_def by auto 
     show ?thesis
-      using q_wit' safe_def v_wit_lt witness_exists' by blast 
+      using q_wit' safe_def v_wit_lt witness_exists'
+      by blast
   next
     case change_view
     thus ?thesis using v_wit_lt q_wit witness_exists
@@ -416,34 +417,60 @@ lemma safe_not_contradicted:
 using assms
 proof (induction v arbitrary: b p rule: less_induct)
   case (less v)
-  \<comment> \<open>Unfold safe to get witness view and quorum\<close>
-  from \<open>safe s b v\<close> obtain v_wit q p_wit b_wit where
+  \<comment> \<open>Extract witnesses from safe definition\<close>
+  from \<open>safe s b v\<close> obtain v_wit q where
     v_wit_less: "v_wit < v" and
-    q_safe: "\<forall>p. p \<in> q \<and> \<not> byz p \<longrightarrow> (s\<cdot>view) p \<ge> v \<and> (\<forall>v'' b''. v_wit < v'' \<and> v'' < v \<longrightarrow> \<not>(s\<cdot>prepared) p v'' b'')" and
-    p_wit_props: "\<not> byz p_wit" "b_wit \<le> b" "(s\<cdot>pre_prepared) p_wit v_wit b_wit"
-    unfolding safe_def by blast
+    q_safe: "\<forall>pa. pa \<in> q \<and> \<not> byz pa \<longrightarrow> 
+        (s\<cdot>view) pa \<ge> v 
+      \<and> (\<forall>v'' b''. v_wit < v'' \<and> v'' < v \<longrightarrow> \<not>(s\<cdot>prepared) pa v'' b'')
+      \<and> (\<forall>b'. b' \<noteq> b \<longrightarrow> \<not>(s\<cdot>pre_prepared) pa v_wit b')" and
+    witness_b: "\<exists> pa . \<not> byz pa \<and> (s\<cdot>pre_prepared) pa v_wit b"
+    unfolding safe_def by auto
   
-  \<comment> \<open>From committed b' at v', get quorum that prepared it\<close>
-  from \<open>(s\<cdot>committed) p v' b'\<close> \<open>\<not> byz p\<close> \<open>inv1 s\<close> obtain q_prep where
-    q_prep: "\<forall>p'. p' \<in> q_prep \<and> \<not> byz p' \<longrightarrow> (s\<cdot>prepared) p' v' b'"
+  \<comment> \<open>From inv1, get quorum q_prep that prepared b' at v'\<close>
+  from \<open>\<not> byz p\<close> \<open>(s\<cdot>committed) p v' b'\<close> \<open>inv1 s\<close>
+  obtain q_prep where q_prep: "\<forall>pa. pa \<in> q_prep \<and> \<not> byz pa \<longrightarrow> (s\<cdot>prepared) pa v' b'"
     unfolding inv1_def by blast
-    
-  \<comment> \<open>Case split on where v' is relative to v_wit\<close>
+  
+  \<comment> \<open>Case split on relationship between v' and v_wit\<close>
   consider (before) "v' < v_wit" | (at) "v' = v_wit" | (between) "v_wit < v' \<and> v' < v"
     using \<open>v' < v\<close> v_wit_less by force
   then show ?case
   proof cases
     case before
-    \<comment> \<open>v' < v_wit: use induction hypothesis on v_wit\<close>
-    from p_wit_props(1,3) \<open>inv4 s\<close> have "safe s b_wit v_wit"
+    \<comment> \<open>v' < v_wit: Get witness party and use induction hypothesis\<close>
+    from witness_b obtain p_wit where
+      p_wit_props: "\<not> byz p_wit" "(s\<cdot>pre_prepared) p_wit v_wit b"
+      by blast
+    
+    \<comment> \<open>From inv4, b is safe at v_wit\<close>
+    from p_wit_props \<open>inv4 s\<close> have "safe s b v_wit"
       unfolding inv4_def by blast
+    
+    \<comment> \<open>Use induction hypothesis to get b' \<le> b\<close>
     from less.IH[OF v_wit_less this before \<open>(s\<cdot>committed) p v' b'\<close> \<open>\<not> byz p\<close> \<open>inv1 s\<close> \<open>inv2 s\<close> \<open>inv3 s\<close> \<open>inv4 s\<close>]
-    have "b' \<le> b_wit" .
-    with p_wit_props(2) show ?thesis by simp
+    show ?thesis .
   next
     case at
-    thus ?thesis
-      sorry
+    \<comment> \<open>v' = v_wit: use inv2 to get quorum that pre-prepared b', then quorum intersection\<close>
+    \<comment> \<open>Pick any party from q_prep that prepared b'\<close>
+    obtain p_prep where p_prep_props: "p_prep \<in> q_prep" "\<not> byz p_prep" "(s\<cdot>prepared) p_prep v' b'"
+      using q_prep by (metis quorum_intersection)
+    \<comment> \<open>From inv2, get quorum that pre-prepared b'\<close>
+    from p_prep_props(2,3) \<open>inv2 s\<close> obtain q_pre where
+      q_pre: "\<forall>pa. pa \<in> q_pre \<and> \<not> byz pa \<longrightarrow> (s\<cdot>pre_prepared) pa v' b'"
+      unfolding inv2_def by blast
+    \<comment> \<open>By quorum intersection, find honest party in both q and q_pre\<close>
+    obtain p'' where p''_props: "\<not> byz p''" "p'' \<in> q" "p'' \<in> q_pre"
+      using quorum_intersection by blast
+    \<comment> \<open>This party pre-prepared b' at v' = v_wit\<close>
+    from p''_props(1,3) q_pre have "(s\<cdot>pre_prepared) p'' v' b'" by blast
+    with at have "(s\<cdot>pre_prepared) p'' v_wit b'" by simp
+    \<comment> \<open>But q_safe says p'' hasn't pre-prepared anything \<noteq> b at v_wit\<close>
+    from p''_props(1,2) q_safe have "\<forall>b'. b' \<noteq> b \<longrightarrow> \<not>(s\<cdot>pre_prepared) p'' v_wit b'" by blast
+    \<comment> \<open>Therefore b' = b\<close>
+    with \<open>(s\<cdot>pre_prepared) p'' v_wit b'\<close> have "b' = b" by blast
+    thus ?thesis by simp
   next
     case between 
     \<comment> \<open>v_wit < v' < v: contradiction - quorum q forbids preparing in this range\<close>
@@ -453,28 +480,6 @@ proof (induction v arbitrary: b p rule: less_induct)
     moreover from \<open>p'' \<in> q_prep\<close> \<open>\<not> byz p''\<close> q_prep have "(s\<cdot>prepared) p'' v' b'"
       by blast
     ultimately show ?thesis by blast
-  qed
-qed
-
-lemma safety:
-  fixes s p v b p' v' b'
-  assumes "\<not> byz p" and "\<not> byz p'"
-    and "(s\<cdot>committed) p v b" and "(s\<cdot>committed) p' v' b'"
-    and "inv1 s" and "inv2 s" and "inv3 s" and "inv4 s"
-  shows "compatible b b'"
-proof -
-  \<comment> \<open>Case split on whether v = v' or not\<close>
-  consider (same_view) "v = v'" | (diff_view) "v \<noteq> v'" by blast
-  then show ?thesis
-  proof cases
-    case same_view
-    thus ?thesis using quorum_intersection \<open>inv1 s\<close> \<open>inv2 s\<close> \<open>inv3 s\<close>
-      unfolding inv1_def inv2_def inv3_def
-      by (metis assms(1,2,3,4) compatible_def dual_order.refl)
-  next
-    case diff_view
-    \<comment> \<open>Different views: use inv4 and safety\<close>
-    oops
   qed
 qed
 
