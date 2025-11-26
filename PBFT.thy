@@ -1,5 +1,5 @@
 theory PBFT
-  imports Main "HOL-Statespace.StateSpaceSyntax"
+  imports Main "HOL-Statespace.StateSpaceSyntax" "HOL-Eisbach.Eisbach"
 begin
 
 definition compatible where
@@ -122,55 +122,67 @@ lemma trans_rel_cases[consumes 1, case_names commit prepare pre_prepare change_v
     | (byzantine_havoc) "byzantine_havoc s s'"
   using assms unfolding trans_rel_def by blast
 
+section \<open>Eisbach VCG Methods\<close>
+
+text \<open>
+  Verification condition generator methods for invariance proofs.
+  These methods automate the common pattern of proving that invariants
+  are preserved by transitions.
+\<close>
+
+named_theorems trans_defs
+declare commit_def[trans_defs]
+declare prepare_def[trans_defs]
+declare pre_prepare_def[trans_defs]
+declare change_view_def[trans_defs]
+declare byzantine_havoc_def[trans_defs]
+
+text \<open>
+  Function update lemmas for VCG.
+  fun_upd_apply is already a default simp rule, but we add related rules
+  and configure auto to split on conditionals from function updates.
+\<close>
+
+text \<open>Method 1: Unfold everything and apply auto (good for simple invariants)\<close>
+method invariance_vcg_auto uses inv_def = 
+  (unfold trans_rel_def trans_defs inv_def, 
+   auto split: if_splits)
+
+text \<open>Method 2: Structured case split with automatic solving\<close>
+method invariance_vcg_cases uses inv_def = 
+  (cases rule: trans_rel_cases; auto simp: inv_def trans_defs)
+
+text \<open>Method 3: Structured case split, leaving subgoals for manual proof\<close>
+method invariance_vcg_split = 
+  (cases rule: trans_rel_cases)
+
+text \<open>Helper method to prove initialization\<close>
+method prove_init uses inv_def = 
+  (simp add: init_def inv_def)
+
 section \<open>Induction proofs\<close>
 
 lemma inv0_inductive:
   shows "init s \<Longrightarrow> inv0 s" and "trans_rel s s' p q v b \<and> inv0 s \<Longrightarrow> inv0 s'"
 proof -
   show "init s \<Longrightarrow> inv0 s"
-    by (simp add: init_def inv0_def)
+    by (prove_init inv_def: inv0_def)
 next
   show "trans_rel s s' p q v b \<and> inv0 s \<Longrightarrow> inv0 s'"
-  proof -
-    assume asm: "trans_rel s s' p q v b \<and> inv0 s"
-    then have inv0: "inv0 s" and trans: "trans_rel s s' p q v b" by simp_all
-    from trans show "inv0 s'"
-    proof (cases rule: trans_rel_cases)
-      case commit
-      \<comment> \<open>commit doesn't change view or any pre_prepared/prepared fields\<close>
-      thus ?thesis using inv0 unfolding inv0_def commit_def by auto
-    next
-      case prepare
-      \<comment> \<open>prepare doesn't change view or any pre_prepared/committed fields\<close>
-      thus ?thesis using inv0 unfolding inv0_def prepare_def by auto
-    next
-      case pre_prepare
-      \<comment> \<open>pre_prepare doesn't change view or any prepared/committed fields\<close>
-      thus ?thesis using inv0 unfolding inv0_def pre_prepare_def by auto
-    next
-      case change_view
-      \<comment> \<open>change_view only increases view for one party, preserves all prepared/committed/pre_prepared\<close>
-      thus ?thesis using inv0 unfolding inv0_def change_view_def 
-        by (auto; metis order.strict_implies_order order.trans)
-    next
-      case byzantine_havoc
-      \<comment> \<open>byzantine_havoc preserves all correct parties' state\<close>
-      thus ?thesis using inv0 unfolding inv0_def byzantine_havoc_def by auto
-    qed
-  qed
+    apply (invariance_vcg_auto inv_def: inv0_def)
+      apply fastforce+
+    done
 qed
 
 lemma inv1_inductive:
   shows "init s \<Longrightarrow> inv1 s" and "trans_rel s s' p q v b \<and> inv1 s \<Longrightarrow> inv1 s'"
 proof -
   show "init s \<Longrightarrow> inv1 s"
-    by (simp add: init_def inv1_def)
+    by (prove_init inv_def: inv1_def)
 next
   show "trans_rel s s' p q v b \<and> inv1 s \<Longrightarrow> inv1 s'"
-    unfolding trans_rel_def commit_def prepare_def pre_prepare_def change_view_def byzantine_havoc_def inv1_def
-    apply auto
-        apply (smt (verit) fun_upd_apply)
-         apply meson+
+    apply (invariance_vcg_auto inv_def: inv1_def)
+        apply meson+
     done
 qed
 
@@ -181,33 +193,9 @@ proof -
     by (simp add: init_def inv2_def)
 next
   show "trans_rel s s' p q v b \<and> inv2 s \<Longrightarrow> inv2 s'"
-  proof -
-    assume asm: "trans_rel s s' p q v b \<and> inv2 s"
-    then have inv2: "inv2 s" and trans: "trans_rel s s' p q v b" by simp_all
-    from trans show "inv2 s'"
-    proof (cases rule: trans_rel_cases)
-      case commit
-      \<comment> \<open>commit doesn't change prepared or pre_prepared\<close>
-      thus ?thesis using inv2 unfolding inv2_def commit_def by auto
-    next
-      case prepare
-      \<comment> \<open>prepare adds to prepared, doesn't change pre_prepared\<close>
-      thus ?thesis using inv2 unfolding inv2_def prepare_def by auto
-    next
-      case pre_prepare
-      \<comment> \<open>pre_prepare adds to pre_prepared, doesn't change prepared\<close>
-      thus ?thesis using inv2 unfolding inv2_def pre_prepare_def 
-        by (auto; metis)
-    next
-      case change_view
-      \<comment> \<open>change_view doesn't change prepared or pre_prepared\<close>
-      thus ?thesis using inv2 unfolding inv2_def change_view_def by auto
-    next
-      case byzantine_havoc
-      \<comment> \<open>byzantine_havoc preserves all correct parties' state\<close>
-      thus ?thesis using inv2 unfolding inv2_def byzantine_havoc_def by auto
-    qed
-  qed
+    apply (invariance_vcg_auto inv_def: inv2_def)
+        apply meson+
+    done
 qed
 
 lemma inv3_inductive:
@@ -217,32 +205,7 @@ proof -
     by (simp add: init_def inv3_def)
 next
   show "trans_rel s s' p q v b \<and> inv3 s \<Longrightarrow> inv3 s'"
-  proof -
-    assume asm: "trans_rel s s' p q v b \<and> inv3 s"
-    then have inv3: "inv3 s" and trans: "trans_rel s s' p q v b" by simp_all
-    from trans show "inv3 s'"
-    proof (cases rule: trans_rel_cases)
-      case commit
-      \<comment> \<open>commit doesn't change pre_prepared\<close>
-      thus ?thesis using inv3 unfolding inv3_def commit_def by auto
-    next
-      case prepare
-      \<comment> \<open>prepare doesn't change pre_prepared\<close>
-      thus ?thesis using inv3 unfolding inv3_def prepare_def by auto
-    next
-      case pre_prepare
-      \<comment> \<open>pre_prepare adds one block to pre_prepared for party p at view v, guaranteed fresh\<close>
-      thus ?thesis using inv3 unfolding inv3_def pre_prepare_def by auto
-    next
-      case change_view
-      \<comment> \<open>change_view doesn't change pre_prepared\<close>
-      thus ?thesis using inv3 unfolding inv3_def change_view_def by auto
-    next
-      case byzantine_havoc
-      \<comment> \<open>byzantine_havoc preserves all correct parties' state\<close>
-      thus ?thesis using inv3 unfolding inv3_def byzantine_havoc_def by auto
-    qed
-  qed
+    by (invariance_vcg_auto inv_def: inv3_def)
 qed
 
 lemma safe_sanity_check_2:
