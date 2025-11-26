@@ -483,4 +483,86 @@ proof (induction v arbitrary: b p rule: less_induct)
   qed
 qed
 
+lemma committed_blocks_compatible:
+  assumes "(s\<cdot>committed) p1 v1 b1" "\<not> byz p1"
+      and "(s\<cdot>committed) p2 v2 b2" "\<not> byz p2"
+      and "inv1 s" "inv2 s" "inv3 s" "inv4 s"
+  shows "compatible b1 b2"
+proof -
+  \<comment> \<open>Case split on relationship between v1 and v2\<close>
+  consider (v1_lt_v2) "v1 < v2" | (v1_eq_v2) "v1 = v2" | (v2_lt_v1) "v2 < v1"
+    by force
+  then show ?thesis
+  proof cases
+    case v1_lt_v2
+    \<comment> \<open>v1 < v2: Show b1 \<le> b2\<close>
+    \<comment> \<open>From inv4, there exists an honest party that pre-prepared b2, so b2 is safe at v2\<close>
+    from \<open>(s\<cdot>committed) p2 v2 b2\<close> \<open>\<not> byz p2\<close> \<open>inv1 s\<close> obtain q_prep where
+      q_prep: "\<forall>p. p \<in> q_prep \<and> \<not> byz p \<longrightarrow> (s\<cdot>prepared) p v2 b2"
+      unfolding inv1_def by blast
+    obtain p_prep where "p_prep \<in> q_prep" "\<not> byz p_prep" "(s\<cdot>prepared) p_prep v2 b2"
+      using q_prep by (metis quorum_intersection)
+    from \<open>\<not> byz p_prep\<close> \<open>(s\<cdot>prepared) p_prep v2 b2\<close> \<open>inv2 s\<close> obtain q_pre where
+      q_pre: "\<forall>p. p \<in> q_pre \<and> \<not> byz p \<longrightarrow> (s\<cdot>pre_prepared) p v2 b2"
+      unfolding inv2_def by blast
+    obtain p_pre where "p_pre \<in> q_pre" "\<not> byz p_pre" "(s\<cdot>pre_prepared) p_pre v2 b2"
+      using q_pre by (metis quorum_intersection)
+    from \<open>\<not> byz p_pre\<close> \<open>(s\<cdot>pre_prepared) p_pre v2 b2\<close> \<open>inv4 s\<close> have "safe s b2 v2"
+      unfolding inv4_def by blast
+    \<comment> \<open>Use safe_not_contradicted to get b1 \<le> b2\<close>
+    from safe_not_contradicted[OF this v1_lt_v2 \<open>(s\<cdot>committed) p1 v1 b1\<close> \<open>\<not> byz p1\<close> \<open>inv1 s\<close> \<open>inv2 s\<close> \<open>inv3 s\<close> \<open>inv4 s\<close>]
+    have "b1 \<le> b2" .
+    thus ?thesis unfolding compatible_def by simp
+  next
+    case v1_eq_v2
+    \<comment> \<open>v1 = v2: Show b1 = b2 using inv3\<close>
+    \<comment> \<open>Get quorums that prepared both blocks\<close>
+    from \<open>(s\<cdot>committed) p1 v1 b1\<close> \<open>\<not> byz p1\<close> \<open>inv1 s\<close> obtain q1_prep where
+      q1_prep: "\<forall>p. p \<in> q1_prep \<and> \<not> byz p \<longrightarrow> (s\<cdot>prepared) p v1 b1"
+      unfolding inv1_def by blast
+    from \<open>(s\<cdot>committed) p2 v2 b2\<close> \<open>\<not> byz p2\<close> \<open>inv1 s\<close> obtain q2_prep where
+      q2_prep: "\<forall>p. p \<in> q2_prep \<and> \<not> byz p \<longrightarrow> (s\<cdot>prepared) p v2 b2"
+      unfolding inv1_def by blast
+    \<comment> \<open>Get quorums that pre-prepared both blocks\<close>
+    obtain p1_prep where "p1_prep \<in> q1_prep" "\<not> byz p1_prep" "(s\<cdot>prepared) p1_prep v1 b1"
+      using q1_prep by (metis quorum_intersection)
+    from \<open>\<not> byz p1_prep\<close> \<open>(s\<cdot>prepared) p1_prep v1 b1\<close> \<open>inv2 s\<close> obtain q1_pre where
+      q1_pre: "\<forall>p. p \<in> q1_pre \<and> \<not> byz p \<longrightarrow> (s\<cdot>pre_prepared) p v1 b1"
+      unfolding inv2_def by blast
+    obtain p2_prep where "p2_prep \<in> q2_prep" "\<not> byz p2_prep" "(s\<cdot>prepared) p2_prep v2 b2"
+      using q2_prep by (metis quorum_intersection)
+    from \<open>\<not> byz p2_prep\<close> \<open>(s\<cdot>prepared) p2_prep v2 b2\<close> \<open>inv2 s\<close> obtain q2_pre where
+      q2_pre: "\<forall>p. p \<in> q2_pre \<and> \<not> byz p \<longrightarrow> (s\<cdot>pre_prepared) p v2 b2"
+      unfolding inv2_def by blast
+    \<comment> \<open>By quorum intersection, find honest party in both pre-prepare quorums\<close>
+    obtain p'' where "\<not> byz p''" "p'' \<in> q1_pre" "p'' \<in> q2_pre"
+      using quorum_intersection by blast
+    from \<open>p'' \<in> q1_pre\<close> \<open>\<not> byz p''\<close> q1_pre have "(s\<cdot>pre_prepared) p'' v1 b1" by blast
+    from \<open>p'' \<in> q2_pre\<close> \<open>\<not> byz p''\<close> q2_pre have "(s\<cdot>pre_prepared) p'' v2 b2" by blast
+    \<comment> \<open>By inv3, since p'' pre-prepared both b1 and b2 at the same view, they must be equal\<close>
+    with \<open>(s\<cdot>pre_prepared) p'' v1 b1\<close> v1_eq_v2 \<open>\<not> byz p''\<close> \<open>inv3 s\<close>
+    have "b1 = b2" unfolding inv3_def by blast
+    thus ?thesis unfolding compatible_def by simp
+  next
+    case v2_lt_v1
+    \<comment> \<open>v2 < v1: Show b2 \<le> b1 (symmetric to first case)\<close>
+    from \<open>(s\<cdot>committed) p1 v1 b1\<close> \<open>\<not> byz p1\<close> \<open>inv1 s\<close> obtain q_prep where
+      q_prep: "\<forall>p. p \<in> q_prep \<and> \<not> byz p \<longrightarrow> (s\<cdot>prepared) p v1 b1"
+      unfolding inv1_def by blast
+    obtain p_prep where "p_prep \<in> q_prep" "\<not> byz p_prep" "(s\<cdot>prepared) p_prep v1 b1"
+      using q_prep by (metis quorum_intersection)
+    from \<open>\<not> byz p_prep\<close> \<open>(s\<cdot>prepared) p_prep v1 b1\<close> \<open>inv2 s\<close> obtain q_pre where
+      q_pre: "\<forall>p. p \<in> q_pre \<and> \<not> byz p \<longrightarrow> (s\<cdot>pre_prepared) p v1 b1"
+      unfolding inv2_def by blast
+    obtain p_pre where "p_pre \<in> q_pre" "\<not> byz p_pre" "(s\<cdot>pre_prepared) p_pre v1 b1"
+      using q_pre by (metis quorum_intersection)
+    from \<open>\<not> byz p_pre\<close> \<open>(s\<cdot>pre_prepared) p_pre v1 b1\<close> \<open>inv4 s\<close> have "safe s b1 v1"
+      unfolding inv4_def by blast
+    \<comment> \<open>Use safe_not_contradicted to get b2 \<le> b1\<close>
+    from safe_not_contradicted[OF this v2_lt_v1 \<open>(s\<cdot>committed) p2 v2 b2\<close> \<open>\<not> byz p2\<close> \<open>inv1 s\<close> \<open>inv2 s\<close> \<open>inv3 s\<close> \<open>inv4 s\<close>]
+    have "b2 \<le> b1" .
+    thus ?thesis unfolding compatible_def by simp
+  qed
+qed
+
 end
