@@ -122,7 +122,7 @@ lemma trans_rel_cases[consumes 1, case_names commit prepare pre_prepare change_v
     | (byzantine_havoc) "byzantine_havoc s s'"
   using assms unfolding trans_rel_def by blast
 
-section \<open>Eisbach VCG Methods\<close>
+section \<open> bach VCG Methods\<close>
 
 text \<open>
   Verification condition generator methods for invariance proofs.
@@ -145,7 +145,15 @@ text \<open>
 
 text \<open>Method 1: Unfold everything and apply auto (good for simple invariants)\<close>
 method invariance_vcg_auto uses inv_def = 
+  \<comment> \<open>We use , and not ; because that loses context assumptions after the first goal somehow.\<close>
+  (unfold trans_rel_def trans_defs inv_def,
+   auto split: if_splits,
+   ((force | fastforce | metis | blast | meson)+)?)
+
+text \<open>Debug version: prints goals after unfolding\<close>
+method invariance_vcg_auto_debug uses inv_def = 
   (unfold trans_rel_def trans_defs inv_def, 
+   -,
    auto split: if_splits)
 
 text \<open>Method 2: Structured case split with automatic solving\<close>
@@ -169,9 +177,7 @@ proof -
     by (prove_init inv_def: inv0_def)
 next
   show "trans_rel s s' p q v b \<and> inv0 s \<Longrightarrow> inv0 s'"
-    apply (invariance_vcg_auto inv_def: inv0_def)
-      apply fastforce+
-    done
+    by (invariance_vcg_auto inv_def: inv0_def)
 qed
 
 lemma inv1_inductive:
@@ -181,9 +187,7 @@ proof -
     by (prove_init inv_def: inv1_def)
 next
   show "trans_rel s s' p q v b \<and> inv1 s \<Longrightarrow> inv1 s'"
-    apply (invariance_vcg_auto inv_def: inv1_def)
-        apply meson+
-    done
+    by (invariance_vcg_auto inv_def: inv1_def)
 qed
 
 lemma inv2_inductive:
@@ -193,9 +197,7 @@ proof -
     by (simp add: init_def inv2_def)
 next
   show "trans_rel s s' p q v b \<and> inv2 s \<Longrightarrow> inv2 s'"
-    apply (invariance_vcg_auto inv_def: inv2_def)
-        apply meson+
-    done
+    by (invariance_vcg_auto inv_def: inv2_def)
 qed
 
 lemma inv3_inductive:
@@ -212,50 +214,25 @@ lemma safe_sanity_check_2:
   assumes "safe s b v" and "trans_rel s s' p q v' b'"
   shows "safe s' b v"
 proof -
-  from \<open>safe s b v\<close> obtain v_wit q_wit where
+  \<comment> \<open>The same witnesses still work after the transition\<close>
+  from \<open>safe s b v\<close> obtain v_wit q_wit pa where
     v_wit_lt: "v_wit < v" and
     q_wit: "\<forall> pa . pa \<in> q_wit \<and> \<not> byz pa \<longrightarrow>
           (s\<cdot>view) pa \<ge> v
         \<and> (\<forall> v'' b'' . v_wit < v'' \<and> v'' < v \<longrightarrow> \<not>(s\<cdot>prepared) pa v'' b'')
         \<and> (\<forall> bc . bc \<noteq> b \<longrightarrow> \<not> (s\<cdot>pre_prepared) pa v_wit bc)" and
-    witness_exists: "\<exists> pa . \<not> byz pa \<and> (s\<cdot>pre_prepared) pa v_wit b"
+    witness_exists: "\<not> byz pa \<and> (s\<cdot>pre_prepared) pa v_wit b"
     unfolding safe_def by auto
-  
-  from \<open>trans_rel s s' p q v' b'\<close> show "safe s' b v"
-  proof (cases rule: trans_rel_cases)
-    case commit
-    thus ?thesis using v_wit_lt q_wit witness_exists 
-      unfolding safe_def commit_def by auto
-  next
-    case prepare
-    thus ?thesis using v_wit_lt q_wit witness_exists
-      unfolding safe_def prepare_def
-      by (auto; smt (verit, del_insts) leD)
-  next
-    case pre_prepare
-    have 
+  hence  
       q_wit': "\<forall> pa . pa \<in> q_wit \<and> \<not> byz pa \<longrightarrow>
           (s'\<cdot>view) pa \<ge> v
         \<and> (\<forall> v'' b'' . v_wit < v'' \<and> v'' < v \<longrightarrow> \<not>(s'\<cdot>prepared) pa v'' b'')
-        \<and> (\<forall> bc . bc \<noteq> b \<longrightarrow> \<not> (s'\<cdot>pre_prepared) pa v_wit bc)" 
-      using v_wit_lt q_wit witness_exists pre_prepare
-      unfolding safe_def pre_prepare_def by auto 
-    have witness_exists': "\<exists> pa . \<not> byz pa \<and> (s'\<cdot>pre_prepared) pa v_wit b" 
-      using v_wit_lt q_wit witness_exists pre_prepare
-      unfolding safe_def pre_prepare_def by auto 
-    show ?thesis
-      using q_wit' safe_def v_wit_lt witness_exists'
-      by blast
-  next
-    case change_view
-    thus ?thesis using v_wit_lt q_wit witness_exists
-      unfolding safe_def change_view_def
-      by (auto; smt (verit) nless_le order_trans) 
-  next
-    case byzantine_havoc
-    thus ?thesis using v_wit_lt q_wit witness_exists
-      unfolding safe_def byzantine_havoc_def by force
-  qed
+        \<and> (\<forall> bc . bc \<noteq> b \<longrightarrow> \<not> (s'\<cdot>pre_prepared) pa v_wit bc)" and 
+      witness_exists': "\<not> byz pa \<and> (s'\<cdot>pre_prepared) pa v_wit b"
+    using \<open>trans_rel s s' p q v' b'\<close>
+    by (invariance_vcg_auto inv_def: safe_def)
+  thus ?thesis
+    using safe_def v_wit_lt by blast 
 qed
 
 lemma inv4_inductive:
