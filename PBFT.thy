@@ -139,7 +139,7 @@ declare byzantine_havoc_def[trans_defs]
 
 text \<open>
   Function update lemmas for VCG.
-  fun_upd_apply is already a default simp rule, but we add related rules
+  @{term fun_upd_apply} is already a default simp rule, but we add related rules
   and configure auto to split on conditionals from function updates.
 \<close>
 
@@ -248,13 +248,13 @@ next
     from trans show "inv4 s'"
     proof (cases rule: trans_rel_cases)
       case commit
-      \<comment> \<open>commit doesn't change pre_prepared, but adds to committed\<close>
+      \<comment> \<open>commit doesn't change pre-prepared, but adds to committed\<close>
       \<comment> \<open>New precondition ensures compatibility with blocks pre-prepared at higher views\<close>
       thus ?thesis using inv4 unfolding inv4_def commit_def safe_def
         by auto
     next
       case prepare
-      \<comment> \<open>prepare doesn't change pre_prepared or committed\<close>
+      \<comment> \<open>prepare doesn't change pre-prepared or committed\<close>
       show ?thesis unfolding inv4_def
       proof (intro allI impI)
         fix pa va ba
@@ -269,7 +269,7 @@ next
       qed
     next
       case pre_prepare
-      \<comment> \<open>pre_prepare adds to pre_prepared with safe precondition\<close>
+      \<comment> \<open>pre-prepare adds to pre-prepared with safe precondition\<close>
       show ?thesis unfolding inv4_def
       proof (intro allI impI)
         fix pa va ba
@@ -299,7 +299,7 @@ next
       qed
     next
       case change_view
-      \<comment> \<open>change_view doesn't change pre_prepared or committed\<close>
+      \<comment> \<open>@{term change_view} doesn't change @{term pre_prepared} or @{term committed}\<close>
       show ?thesis unfolding inv4_def
       proof (intro allI impI)
         fix pa va ba
@@ -314,7 +314,7 @@ next
       qed
     next
       case byzantine_havoc
-      \<comment> \<open>byzantine_havoc preserves all correct parties' state\<close>
+      \<comment> \<open>@{term byzantine_havoc} preserves all correct parties' state\<close>
       show ?thesis unfolding inv4_def
       proof (intro allI impI)
         fix pa va ba
@@ -367,53 +367,53 @@ proof (induction v arbitrary: b p rule: less_induct)
     witness_b: "\<exists> pa . \<not> byz pa \<and> (s\<cdot>pre_prepared) pa v_wit b"
     unfolding safe_def by auto
   
-  \<comment> \<open>From inv1, get quorum q_prep that prepared b' at v'\<close>
+  \<comment> \<open>From inv1, get quorum @{term q_prep} that prepared b' at v'\<close>
   from \<open>\<not> byz p\<close> \<open>(s\<cdot>committed) p v' b'\<close> \<open>inv1 s\<close>
   obtain q_prep where q_prep: "\<forall>pa. pa \<in> q_prep \<and> \<not> byz pa \<longrightarrow> (s\<cdot>prepared) pa v' b'"
     unfolding inv1_def by blast
   
-  \<comment> \<open>Case split on relationship between v' and v_wit\<close>
+  \<comment> \<open>Case split on relationship between v' and @{term v_wit}\<close>
   consider (before) "v' < v_wit" | (at) "v' = v_wit" | (between) "v_wit < v' \<and> v' < v"
     using \<open>v' < v\<close> v_wit_less by force
   then show ?case
   proof cases
     case before
-    \<comment> \<open>v' < v_wit: Get witness party and use induction hypothesis\<close>
+    \<comment> \<open>@{term "v' < v_wit"}: Get witness party and use induction hypothesis\<close>
     from witness_b obtain p_wit where
       p_wit_props: "\<not> byz p_wit" "(s\<cdot>pre_prepared) p_wit v_wit b"
       by blast
     
-    \<comment> \<open>From inv4, b is safe at v_wit\<close>
+    \<comment> \<open>From inv4, b is safe at @{term v_wit}\<close>
     from p_wit_props \<open>inv4 s\<close> have "safe s b v_wit"
       unfolding inv4_def by blast
     
-    \<comment> \<open>Use induction hypothesis to get b' \<le> b\<close>
+    \<comment> \<open>Use induction hypothesis to get @{term "b' \<le> b"}\<close>
     from less.IH[OF v_wit_less this before \<open>(s\<cdot>committed) p v' b'\<close> \<open>\<not> byz p\<close> \<open>inv1 s\<close> \<open>inv2 s\<close> \<open>inv3 s\<close> \<open>inv4 s\<close>]
     show ?thesis .
   next
     case at
-    \<comment> \<open>v' = v_wit: use inv2 to get quorum that pre-prepared b', then quorum intersection\<close>
-    \<comment> \<open>Pick any party from q_prep that prepared b'\<close>
+    \<comment> \<open>@{term "v' = v_wit"}: use inv2 to get quorum that pre-prepared b', then quorum intersection\<close>
+    \<comment> \<open>Pick any party from @{term q_prep} that prepared b'\<close>
     obtain p_prep where p_prep_props: "p_prep \<in> q_prep" "\<not> byz p_prep" "(s\<cdot>prepared) p_prep v' b'"
       using q_prep by (metis quorum_intersection)
     \<comment> \<open>From inv2, get quorum that pre-prepared b'\<close>
     from p_prep_props(2,3) \<open>inv2 s\<close> obtain q_pre where
       q_pre: "\<forall>pa. pa \<in> q_pre \<and> \<not> byz pa \<longrightarrow> (s\<cdot>pre_prepared) pa v' b'"
       unfolding inv2_def by blast
-    \<comment> \<open>By quorum intersection, find honest party in both q and q_pre\<close>
+    \<comment> \<open>By quorum intersection, find honest party in both @{term q} and @{term q_pre}\<close>
     obtain p'' where p''_props: "\<not> byz p''" "p'' \<in> q" "p'' \<in> q_pre"
       using quorum_intersection by blast
-    \<comment> \<open>This party pre-prepared b' at v' = v_wit\<close>
+    \<comment> \<open>This party pre-prepared @{term b'} at @{term "v' = v_wit"}\<close>
     from p''_props(1,3) q_pre have "(s\<cdot>pre_prepared) p'' v' b'" by blast
     with at have "(s\<cdot>pre_prepared) p'' v_wit b'" by simp
-    \<comment> \<open>But q_safe says p'' hasn't pre-prepared anything \<noteq> b at v_wit\<close>
+    \<comment> \<open>But @{term q_safe} says @{term p''} hasn't pre-prepared anything different from @{term b} at @{term v_wit}\<close>
     from p''_props(1,2) q_safe have "\<forall>b'. b' \<noteq> b \<longrightarrow> \<not>(s\<cdot>pre_prepared) p'' v_wit b'" by blast
     \<comment> \<open>Therefore b' = b\<close>
     with \<open>(s\<cdot>pre_prepared) p'' v_wit b'\<close> have "b' = b" by blast
     thus ?thesis by simp
   next
     case between 
-    \<comment> \<open>v_wit < v' < v: contradiction - quorum q forbids preparing in this range\<close>
+    \<comment> \<open>@{term "v_wit < v'"} and @{term "v' < v"}: contradiction - quorum @{term q} forbids preparing in this range\<close>
     obtain p'' where "\<not> byz p''" "p'' \<in> q" "p'' \<in> q_prep"
       using quorum_intersection by blast
     with q_safe between have "\<not>(s\<cdot>prepared) p'' v' b'" by blast
@@ -435,7 +435,7 @@ proof -
   then show ?thesis
   proof cases
     case v1_lt_v2
-    \<comment> \<open>v1 < v2: Show b1 \<le> b2\<close>
+    \<comment> \<open>@{term "v1 < v2"}: Show @{term "b1 \<le> b2"}\<close>
     \<comment> \<open>From inv4, there exists an honest party that pre-prepared b2, so b2 is safe at v2\<close>
     from \<open>(s\<cdot>committed) p2 v2 b2\<close> \<open>\<not> byz p2\<close> \<open>inv1 s\<close> obtain q_prep where
       q_prep: "\<forall>p. p \<in> q_prep \<and> \<not> byz p \<longrightarrow> (s\<cdot>prepared) p v2 b2"
@@ -449,7 +449,7 @@ proof -
       using q_pre by (metis quorum_intersection)
     from \<open>\<not> byz p_pre\<close> \<open>(s\<cdot>pre_prepared) p_pre v2 b2\<close> \<open>inv4 s\<close> have "safe s b2 v2"
       unfolding inv4_def by blast
-    \<comment> \<open>Use safe_not_contradicted to get b1 \<le> b2\<close>
+    \<comment> \<open>Use @{thm safe_not_contradicted} to get @{term "b1 \<le> b2"}\<close>
     from safe_not_contradicted[OF this v1_lt_v2 \<open>(s\<cdot>committed) p1 v1 b1\<close> \<open>\<not> byz p1\<close> \<open>inv1 s\<close> \<open>inv2 s\<close> \<open>inv3 s\<close> \<open>inv4 s\<close>]
     have "b1 \<le> b2" .
     thus ?thesis unfolding compatible_def by simp
@@ -485,7 +485,7 @@ proof -
     thus ?thesis unfolding compatible_def by simp
   next
     case v2_lt_v1
-    \<comment> \<open>v2 < v1: Show b2 \<le> b1 (symmetric to first case)\<close>
+    \<comment> \<open>@{term "v2 < v1"}: Show @{term "b2 \<le> b1"} (symmetric to first case)\<close>
     from \<open>(s\<cdot>committed) p1 v1 b1\<close> \<open>\<not> byz p1\<close> \<open>inv1 s\<close> obtain q_prep where
       q_prep: "\<forall>p. p \<in> q_prep \<and> \<not> byz p \<longrightarrow> (s\<cdot>prepared) p v1 b1"
       unfolding inv1_def by blast
@@ -498,11 +498,13 @@ proof -
       using q_pre by (metis quorum_intersection)
     from \<open>\<not> byz p_pre\<close> \<open>(s\<cdot>pre_prepared) p_pre v1 b1\<close> \<open>inv4 s\<close> have "safe s b1 v1"
       unfolding inv4_def by blast
-    \<comment> \<open>Use safe_not_contradicted to get b2 \<le> b1\<close>
+    \<comment> \<open>Use @{thm safe_not_contradicted} to get @{term "b2 \<le> b1"}\<close>
     from safe_not_contradicted[OF this v2_lt_v1 \<open>(s\<cdot>committed) p2 v2 b2\<close> \<open>\<not> byz p2\<close> \<open>inv1 s\<close> \<open>inv2 s\<close> \<open>inv3 s\<close> \<open>inv4 s\<close>]
     have "b2 \<le> b1" .
     thus ?thesis unfolding compatible_def by simp
   qed
 qed
+
+end
 
 end
